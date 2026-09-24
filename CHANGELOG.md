@@ -47,7 +47,10 @@ keys remain all-access.
 - The peer map is keyed by node ID and reused for writes that cannot change peer visibility, so a routine map request no longer rebuilds it. Adds `headscale_nodestore_snapshot_builds_total` [#3417](https://github.com/juanfont/headscale/issues/3417) [#3450](https://github.com/juanfont/headscale/pull/3450)
 - Headscale now requires Go 1.27 to build
 
-## 0.29.4 (unreleased)
+## 0.29.4-arsydoni4326-alt (2026-09-25)
+
+Fork release of the `arsydoni4326-alt` fork. Version numbers in this fork
+always end with `-arsydoni4326-alt`.
 
 **Minimum supported Tailscale client version: v1.80.0**
 
@@ -65,6 +68,7 @@ keys remain all-access.
 - Fix tvOS setup instructions: install the VPN configuration before setting the coordination server URL [#3431](https://github.com/juanfont/headscale/pull/3431)
 - Map requests that only bump LastSeen, endpoints or DERP region no longer resend the whole node to every peer, and health probes that change nothing no longer write. Adds `headscale_mapper_changes_dropped_total` and `headscale_ha_health_updates_total` [#3417](https://github.com/juanfont/headscale/issues/3417) [#3450](https://github.com/juanfont/headscale/pull/3450)
 - Fix ACME renewal stopping permanently after a `badNonce` reply, because the error logging middleware drained the response body the acme client needs to detect it [#3461](https://github.com/juanfont/headscale/pull/3461)
+- Use `Dockerfile.tailscale-HEAD` for the GHCR deploy build
 
 ## 0.29.3-arsydoni4326-alt (2026-09-25)
 
