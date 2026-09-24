@@ -66,6 +66,15 @@ keys remain all-access.
 - Map requests that only bump LastSeen, endpoints or DERP region no longer resend the whole node to every peer, and health probes that change nothing no longer write. Adds `headscale_mapper_changes_dropped_total` and `headscale_ha_health_updates_total` [#3417](https://github.com/juanfont/headscale/issues/3417) [#3450](https://github.com/juanfont/headscale/pull/3450)
 - Fix ACME renewal stopping permanently after a `badNonce` reply, because the error logging middleware drained the response body the acme client needs to detect it [#3461](https://github.com/juanfont/headscale/pull/3461)
 
+## 0.29.3-arsydoni4326-alt (2026-09-25)
+
+Fork release of the `arsydoni4326-alt` fork. Version numbers in this fork
+always end with `-arsydoni4326-alt`.
+
+### Changes
+
+- Add GHCR Docker build workflow and headplane submodule
+
 ## 0.29.3 (2026-07-29)
 
 **Minimum supported Tailscale client version: v1.80.0**
