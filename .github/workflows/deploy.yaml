@@ -73,7 +73,7 @@ jobs:
           context: .
           push: true
           platforms: linux/amd64,linux/arm64
-          file: ./Dockerfile
+          file: ./Dockerfile.tailscale-HEAD
           build-args: |
             APP_VERSION=${{ steps.git_meta.outputs.APP_VERSION }}
             APP_COMMIT=${{ steps.git_meta.outputs.APP_COMMIT }}
