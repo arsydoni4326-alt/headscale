@@ -33,6 +33,13 @@ Headscale is open to code contributions for bug fixes without discussion.
 
 If you find mistakes in the documentation, please submit a fix to the documentation.
 
+## Versioning
+
+All version numbers in this fork must end with the suffix `-arsydoni4326-alt`.
+For example, a release version is written as `v0.29.3-arsydoni4326-alt`. This
+suffix identifies releases of the `arsydoni4326-alt` fork and must always be
+present in version numbers, tags, and changelog entries.
+
 ## AI Policy
 
 Please have a look at our [AI_POLICY.md](https://github.com/juanfont/headscale/blob/main/AI_POLICY.md).
