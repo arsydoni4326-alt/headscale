@@ -2,79 +2,76 @@
 
 ## Objective
 
-Create a working `Dockerfile` that builds the headscale control server from
-source and runs it in a minimal Debian runtime (previous objective: Git Flow
-release `v0.29.4-arsydoni4326-alt`, completed and merged to `main`).
+Add update check API endpoint to headscale backend.
 
 ## Progress
 
-- [x] Created `Dockerfile` in the repo root: multi-stage build using
-      `golang:1.27.0-trixie` (matches `Dockerfile.integration` convention) and
-      `debian:trixie-slim` runtime. `ENTRYPOINT ["headscale"]`, `CMD ["serve"]`
-      so `docker run ... headscale serve` / compose `command: serve` works.
-- [x] Validated with a real build (`docker build -t headscale:local .`) and a
-      live container: server starts, `/health` returns `{"status":"pass"}`
-      (HTTP 200), `headscale health` exits 0, SQLite DB and noise key are
-      created under `/var/lib/headscale`.
-- [x] Documented the Dockerfile in `docs/setup/install/container.md`.
+### Headplane (frontend)
+- [x] Created `app/update-check/` domain (README, types, provider, modal, hook)
+- [x] Modified build pipeline: `__COMMIT_HASH__` global, `HEADPLANE_COMMIT` env
+- [x] Integrated: root.tsx provider, header menu item, modal on auto-check
+- [x] Updated docs: ROADMAP.md, SPECIFICATION.md (FR-10)
+
+### Headscale (backend)
+- [x] Created `hscontrol/updatecheck/` package with:
+  - `Handler()` - HTTP handler returning version info + remote check
+  - `GET /api/v1/update-check` - returns current version
+  - `GET /api/v1/update-check?check=true` - additionally fetches remote commit
+  - Built-in GitHub API fetch against `github.com/arsydoni4326-alt/headscale`
+- [x] Wired route in `app.go`
+- [x] Added test file
+
+## Decisions and Assumptions
+
+- Headscale API endpoint requires no auth (like `/version` and `/health`)
+- Uses the fork repo: `https://github.com/arsydoni4326-alt/headscale.git`
+- The remote check optionally performs a GitHub API call when `?check=true`
+- Both packages (frontend `app/update-check/` and backend `hscontrol/updatecheck/`) are self-contained to survive upstream merges
+
+---
+
+# Previous Session
+
+## Objective
+
+Git Flow release `v0.29.6-arsydoni4326-alt` — completed and merged to `main`.
+
+## Progress
+
 - [x] Committed staged `.github/workflows/deploy.yaml` change on `dev`
-      (`e984a780 ci: use Dockerfile.tailscale-HEAD for GHCR deploy build`)
-- [x] Created release branch `release/v0.29.4-arsydoni4326-alt` from `dev`
-- [x] Updated `CHANGELOG.md`: renamed `0.29.4 (unreleased)` to
-      `0.29.4-arsydoni4326-alt (2026-09-25)` and added the fork release note
-      plus the `Dockerfile.tailscale-HEAD` change
-      (`413ee6e9 changelog: add 0.29.4-arsydoni4326-alt fork release entry`)
+      (`5fb5e622 ci: use Dockerfile for GHCR deploy build`) — the GHCR deploy
+      build now uses the repo `Dockerfile` instead of `Dockerfile.tailscale-HEAD`
+- [x] Created release branch `release/v0.29.6-arsydoni4326-alt` from `dev`
+- [x] Updated `CHANGELOG.md`: added the `0.29.6-arsydoni4326-alt (2026-09-25)`
+      fork release section with the `Dockerfile` change
+      (`52ae3658 changelog: add 0.29.6-arsydoni4326-alt fork release entry`)
 - [x] Finished release with `git flow release finish`:
-  - Merged release branch into `main` (merge commit `48a009d5`)
-  - Tagged `main` with `v0.29.4-arsydoni4326-alt`
-  - Merged release tag back into `dev` (merge commit `4e92cd7b`)
-  - Deleted `release/v0.29.4-arsydoni4326-alt` branch
-- [ ] Push `main`, `dev`, and tag `v0.29.4-arsydoni4326-alt` to `origin` — **blocked: no GitHub credentials available in this environment**
+  - Merged release branch into `main` (merge commit `28273878`)
+  - Tagged `main` with `v0.29.6-arsydoni4326-alt`
+  - Merged release tag back into `dev` (merge commit `b059e497`)
+  - Deleted `release/v0.29.6-arsydoni4326-alt` branch
+- [ ] Push `main`, `dev`, and tag `v0.29.6-arsydoni4326-alt` to `origin` — **blocked: no GitHub credentials available in this environment**
 
 ## Decisions and Assumptions
 
 - This repo uses `dev` as the integration branch (there is no `develop` branch).
-- No `VERSION` file exists; versioning is tracked in `CHANGELOG.md`.
 - Version format convention: all version numbers in this fork must end with
   `-arsydoni4326-alt` (documented in `CONTRIBUTING.md`).
-- Next fork release version chosen as `v0.29.4-arsydoni4326-alt` to match the
-  `0.29.4 (unreleased)` CHANGELOG section (confirmed by user).
+- Version number auto-increments from the latest tag: latest was
+  `v0.29.5-arsydoni4326-alt`, so this release is `v0.29.6-arsydoni4326-alt`.
 - All staged files are committed and included in the current release.
-- `Dockerfile` uses `golang:1.27.0-trixie` (matches `Dockerfile.integration`)
-  and `debian:trixie-slim` runtime (matches the repo's existing container
-  convention; the official upstream image uses distroless, but a slim Debian
-  base keeps a shell for debugging while staying small).
-- `ENTRYPOINT ["headscale"]` + `CMD ["serve"]` so the image works both with
-  `docker run ... headscale serve` and compose `command: serve`.
-
-## Discoveries
-
-- `session.md` was committed to `dev` during the previous session
-  (`8fef36c2`) and was carried into `main` by this release's merge. It is a
-  working-context file, not release content; harmless but worth noting.
-- No GitHub push credentials are configured: HTTPS remote has no credential
-  helper, and SSH keys (`git.key`, `id_rsa`, `github.key`) are all rejected by
-  GitHub (`Permission denied (publickey)`).
-- `headscale version` reports `dev` even when built with
-  `-ldflags "-X main.version=..."`: `debug.ReadBuildInfo().Main.Version` is
-  only populated when building from a versioned module (e.g.
-  `github.com/juanfont/headscale@v0.29.4`), not from the `-X` flag. The
-  Makefile has the same behaviour, so the Dockerfile is consistent with the
-  repo's own build process.
-- Docker host-side port forwarding is broken in this environment (this host is
-  itself a container): connections to a published port connect but receive no
-  response. The server itself is healthy — verified via the in-container
-  `/health` endpoint and the `headscale health` CLI over the unix socket.
+- `git flow release start` refuses to run with staged changes, so the staged
+  file is committed on `dev` first, then the release branch is created from
+  `dev` (same pattern as the v0.29.4 release).
+- The v0.29.5 release did not add a CHANGELOG entry; this release follows the
+  fork convention (suffix must appear in changelog entries) and adds one.
 
 ## Known Issues and Limitations
 
 - Pushing to `origin` requires the user to authenticate (e.g., `gh auth login`,
   a PAT, or an authorized SSH key).
-- The `Dockerfile` build embeds the version only via the module path; the
-  `VERSION` build-arg is accepted for parity with the Makefile but does not
-  change the reported `headscale version`.
 
 ## Pending Work
 
-- Push `main`, `dev`, and tag `v0.29.4-arsydoni4326-alt` to `origin` once
+- Push `main`, `dev`, and tag `v0.29.6-arsydoni4326-alt` to `origin` once
   credentials are available.

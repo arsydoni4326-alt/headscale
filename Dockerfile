@@ -32,7 +32,7 @@ RUN go mod download
 # Copy source and build
 COPY . .
 RUN CGO_ENABLED=0 go build -buildmode=pie \
-  -ldflags="-s -w -X 'main.Version=${CPA_VERSION}' -X 'main.Commit=${CPA_COMMIT}' -X 'main.BuildDate=${BUILD_DATE}'" \
+  -ldflags="-s -w -X 'main.Version=${APP_VERSION}' -X 'main.Commit=${APP_COMMIT}' -X 'main.BuildDate=${BUILD_DATE}'" \
   -o /go/bin/headscale ./cmd/headscale
 
 # Runtime stage
