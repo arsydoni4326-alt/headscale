@@ -47,6 +47,20 @@ keys remain all-access.
 - The peer map is keyed by node ID and reused for writes that cannot change peer visibility, so a routine map request no longer rebuilds it. Adds `headscale_nodestore_snapshot_builds_total` [#3417](https://github.com/juanfont/headscale/issues/3417) [#3450](https://github.com/juanfont/headscale/pull/3450)
 - Headscale now requires Go 1.27 to build
 
+## 0.29.7-arsydoni4326-alt (2026-09-25)
+
+Fork release of the `arsydoni4326-alt` fork. Version numbers in this fork
+always end with `-arsydoni4326-alt`.
+
+### Changes
+
+- Added `GET /api/v1/update-check` endpoint for checking updates against the
+  fork repository (`github.com/arsydoni4326-alt/headscale`). Returns current
+  version info; optionally fetches remote latest commit with `?check=true`.
+- Fixed `CPA_VERSION`/`CPA_COMMIT` naming inconsistency in Dockerfile
+  (renamed to `APP_VERSION`/`APP_COMMIT`).
+- Updated `headplane` submodule to `v0.7.5-arsydoni4326-alt`.
+
 ## 0.29.6-arsydoni4326-alt (2026-09-25)
 
 Fork release of the `arsydoni4326-alt` fork. Version numbers in this fork
