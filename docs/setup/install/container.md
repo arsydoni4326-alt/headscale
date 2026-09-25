@@ -15,6 +15,26 @@ Registry](https://github.com/juanfont/headscale/pkgs/container/headscale). The c
 - [GitHub Container Registry](https://github.com/juanfont/headscale/pkgs/container/headscale):
   `ghcr.io/juanfont/headscale:<VERSION>`
 
+## Build from source
+
+To build a headscale image from a local checkout of the repository, use the
+`Dockerfile` in the repository root:
+
+```shell
+docker build \
+  --build-arg VERSION="$(git describe --always --tags --dirty)" \
+  --tag headscale:local \
+  .
+```
+
+The image is a multi-stage build: the headscale binary is compiled with the
+`golang:1.27.0` toolchain and copied into a minimal `debian:trixie-slim`
+runtime. The default entrypoint is `headscale` with `serve` as the default
+command, so the image is a drop-in replacement for the official image in the
+examples below (`docker run ... headscale serve` or `command: serve` in
+docker-compose). Ports `8080/tcp` (control plane) and `9090/tcp` (metrics and
+debug) are exposed.
+
 ## Configure and run headscale
 
 1. Create a directory on the container host to store headscale's [configuration](../../ref/configuration.md) and the SQLite database:
