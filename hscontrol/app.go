@@ -35,6 +35,7 @@ import (
 	"github.com/juanfont/headscale/hscontrol/state"
 	"github.com/juanfont/headscale/hscontrol/types"
 	"github.com/juanfont/headscale/hscontrol/types/change"
+	"github.com/juanfont/headscale/hscontrol/updatecheck"
 	"github.com/juanfont/headscale/hscontrol/util"
 	"github.com/pkg/profile"
 	"github.com/rs/zerolog/log"
@@ -473,6 +474,7 @@ func (h *Headscale) createRouter(apiV1Mux, apiV2Mux http.Handler) *chi.Mux {
 	r.Get("/robots.txt", h.RobotsHandler)
 	r.Get("/health", h.HealthHandler)
 	r.Get("/version", h.VersionHandler)
+	r.Get("/api/v1/update-check", updatecheck.Handler())
 	r.Get("/key", h.KeyHandler)
 	r.Get("/register/{auth_id}", h.authProvider.RegisterHandler)
 	r.Get("/auth/{auth_id}", h.authProvider.AuthHandler)

@@ -2,6 +2,38 @@
 
 ## Objective
 
+Add update check API endpoint to headscale backend.
+
+## Progress
+
+### Headplane (frontend)
+- [x] Created `app/update-check/` domain (README, types, provider, modal, hook)
+- [x] Modified build pipeline: `__COMMIT_HASH__` global, `HEADPLANE_COMMIT` env
+- [x] Integrated: root.tsx provider, header menu item, modal on auto-check
+- [x] Updated docs: ROADMAP.md, SPECIFICATION.md (FR-10)
+
+### Headscale (backend)
+- [x] Created `hscontrol/updatecheck/` package with:
+  - `Handler()` - HTTP handler returning version info + remote check
+  - `GET /api/v1/update-check` - returns current version
+  - `GET /api/v1/update-check?check=true` - additionally fetches remote commit
+  - Built-in GitHub API fetch against `github.com/arsydoni4326-alt/headscale`
+- [x] Wired route in `app.go`
+- [x] Added test file
+
+## Decisions and Assumptions
+
+- Headscale API endpoint requires no auth (like `/version` and `/health`)
+- Uses the fork repo: `https://github.com/arsydoni4326-alt/headscale.git`
+- The remote check optionally performs a GitHub API call when `?check=true`
+- Both packages (frontend `app/update-check/` and backend `hscontrol/updatecheck/`) are self-contained to survive upstream merges
+
+---
+
+# Previous Session
+
+## Objective
+
 Git Flow release `v0.29.6-arsydoni4326-alt` — completed and merged to `main`.
 
 ## Progress
