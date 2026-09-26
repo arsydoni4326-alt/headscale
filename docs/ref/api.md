@@ -58,6 +58,29 @@ Headscale server at `/api/v1/docs` for details.
         https://headscale.example.com/api/v1/auth/register
     ```
 
+### Update check
+
+The fork exposes a public, unauthenticated endpoint that reports the running
+binary's version information and, optionally, whether an update is available:
+
+```console
+curl https://headscale.example.com/api/v1/update-check
+```
+
+Without `?check=true`, the endpoint returns the current version information
+only. With `?check=true`, it fetches the latest release tag (for release
+builds) or commit hash (for dev builds) from the configured GitHub repository
+and compares it with the running binary:
+
+```console
+curl "https://headscale.example.com/api/v1/update-check?check=true"
+```
+
+Results are cached for 15 minutes. The remote repository can be overridden via
+the `HEADSCALE_UPDATE_CHECK_REPO` environment variable.
+
+See [The fork](../about/fork.md) for details about this fork-specific feature.
+
 ## Remote control
 
 The `headscale` binary can control a Headscale instance from a remote machine over the HTTP API.
