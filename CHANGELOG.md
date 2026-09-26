@@ -49,6 +49,32 @@ keys remain all-access.
 
 # Next
 
+## 0.29.10-arsydoni4326-alt (2026-09-26)
+
+Fork release of the `arsydoni4326-alt` fork. Version numbers in this fork
+always end with `-arsydoni4326-alt`.
+
+### Changes
+
+- **Phase 3: UI/UX Polish** — Audit, documentation, and minor style improvements:
+  - UI Inventory & Audit: read all server-rendered template files and the
+    Headplane frontend component library, cataloguing UI elements, shared
+    components, and polishing opportunities.
+  - Created `docs/usage/ui-guide.md` with screenshot placeholders, Mermaid
+    flow diagrams for key user flows, contributor guidance, and a maintenance
+    checklist.
+  - Created `docs/assets/screenshots/` and `docs/assets/diagrams/` directories
+    for storing visual documentation.
+  - Updated `mkdocs.yml` to include the UI Guide in the documentation nav.
+  - Accessibility: added `role="img"` to status circle SVG; verified focus
+    states, ARIA labels, and keyboard navigation across all components.
+  - Visual refinements: increased table-list item padding for touch targets;
+    simplified add button icon sizing in token list editor; added
+    `active:scale-[0.98]` press-state feedback on buttons; added entrance
+    animation (opacity + scale) to dialog panels; added transition-opacity
+    to mobile navigation tabs.
+- Updated `headplane` submodule to `v0.7.8-arsydoni4326-alt`.
+
 ## 0.29.9-arsydoni4326-alt (2026-09-26)
 
 Fork release of the `arsydoni4326-alt` fork. Version numbers in this fork
