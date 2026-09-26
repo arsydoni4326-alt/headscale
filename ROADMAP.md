@@ -50,22 +50,9 @@ harden what exists today before expanding into new territory.
 - Add the `/api/v1/update-check` endpoint to the OpenAPI specification so it is
   discoverable alongside the rest of the v1 API.
 
-## Phase 2 — Update Checker Hardening
+## Phase 2 — Update Checker Hardening (Completed)
 
-- Add server-side caching of the GitHub API response in
-  `hscontrol/updatecheck/` to stay within the unauthenticated rate limit
-  (60 requests/hour) and avoid a remote call on every `?check=true` request.
-- Add `sessionStorage` caching in `headplane/app/update-check/` so the modal
-  does not re-fetch on every page load (noted as pending work in
-  `headplane/session.md`).
-- Compare release versions instead of raw commit hashes where possible, so a
-  local build or dirty tree does not report a false update.
-- Make the remote repository configurable (config file or environment variable)
-  instead of hardcoding the fork owner/repo.
-- Add "dismiss for this session" and "remind me later" options to the update
-  modal, and link to the changelog/release notes for the new version.
-- Add metrics for the endpoint (request count, remote-check failures, cache
-  hit rate) and tests for edge cases (rate limit, timeout, malformed response).
+See [CHANGELOG](./CHANGELOG.md) for the list of changes in this phase.
 
 ## Phase 3 — UI/UX Polish
 
