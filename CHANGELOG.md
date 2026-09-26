@@ -47,6 +47,8 @@ keys remain all-access.
 - The peer map is keyed by node ID and reused for writes that cannot change peer visibility, so a routine map request no longer rebuilds it. Adds `headscale_nodestore_snapshot_builds_total` [#3417](https://github.com/juanfont/headscale/issues/3417) [#3450](https://github.com/juanfont/headscale/pull/3450)
 - Headscale now requires Go 1.27 to build
 
+# Next
+
 ## 0.29.9-arsydoni4326-alt (2026-09-26)
 
 Fork release of the `arsydoni4326-alt` fork. Version numbers in this fork
