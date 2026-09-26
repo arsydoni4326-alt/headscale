@@ -135,6 +135,12 @@ derp:
 # Disables the automatic check for headscale updates on startup
 disable_check_updates: false
 
+# Remote repository for the update-check endpoint (/api/v1/update-check).
+# Overrides the default (arsydoni4326-alt/headscale).
+# Can also be set via the HEADSCALE_UPDATE_CHECK_REPO environment variable.
+# update_check:
+#   repo: "arsydoni4326-alt/headscale"
+
 # Node lifecycle configuration.
 node:
   # Default key expiry for non-tagged nodes, regardless of registration method

@@ -47,6 +47,44 @@ keys remain all-access.
 - The peer map is keyed by node ID and reused for writes that cannot change peer visibility, so a routine map request no longer rebuilds it. Adds `headscale_nodestore_snapshot_builds_total` [#3417](https://github.com/juanfont/headscale/issues/3417) [#3450](https://github.com/juanfont/headscale/pull/3450)
 - Headscale now requires Go 1.27 to build
 
+## 0.29.9-arsydoni4326-alt (unreleased)
+
+Fork release of the `arsydoni4326-alt` fork. Version numbers in this fork
+always end with `-arsydoni4326-alt`.
+
+### Changes
+
+- Added root-level `SPECIFICATION.md` and `ARCHITECTURE.md` describing the fork
+  as a whole (backend + frontend), including the fork-specific features and the
+  feature-preservation rule.
+- Added a CI check that verifies `hscontrol/updatecheck/` and
+  `headplane/app/update-check/` still exist after every merge, so an upstream
+  merge cannot silently delete them.
+- Documented the fork-specific features in the user-facing docs site (`docs/`),
+  including the update-check endpoint and the version suffix convention.
+- Added the `/api/v1/update-check` endpoint to the OpenAPI specification so it
+  is discoverable alongside the rest of the v1 API.
+- **Update-check hardening** (Phase 2):
+  - Server-side caching of GitHub API responses (15-min TTL, mutex-protected
+    with singleflight behavior) to stay within unauthenticated rate limits.
+  - Configurable remote repository via `HEADSCALE_UPDATE_CHECK_REPO` env var
+    (format: `owner/repo`), defaulting to `arsydoni4326-alt/headscale`.
+  - Release version comparison for tagged builds: fetches the latest release
+    tag from GitHub and compares versions via semver precedence. Falls back to
+    commit-hash comparison for dev builds (dirty, pseudo-version, or untagged).
+  - Prometheus metrics: `headscale_updatecheck_requests_total`,
+    `headscale_updatecheck_remote_failures_total`,
+    `headscale_updatecheck_cache_hits_total`,
+    `headscale_updatecheck_cache_misses_total`.
+  - Frontend sessionStorage caching (15-min TTL) so the modal does not re-fetch
+    on every page load; manual checks bypass the cache.
+  - "Dismiss for this session" and "Remind me later (24h)" buttons on the
+    update modal, using sessionStorage.
+  - Release notes link when a tag-based update is detected.
+  - Comprehensive edge-case tests: version parsing, semver comparison, cache
+    hit/miss/expiry, malformed GitHub API responses, Go module pseudo-version
+    detection, dev-build fallback.
+
 ## 0.29.8-arsydoni4326-alt (2026-09-25)
 
 Fork release of the `arsydoni4326-alt` fork. Version numbers in this fork
