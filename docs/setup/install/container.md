@@ -22,10 +22,17 @@ To build a headscale image from a local checkout of the repository, use the
 
 ```shell
 docker build \
-  --build-arg VERSION="$(git describe --always --tags --dirty)" \
+  --build-arg APP_VERSION="$(git describe --tags --abbrev=0)" \
+  --build-arg APP_COMMIT="$(git rev-parse --short HEAD)" \
+  --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --tag headscale:local \
   .
 ```
+
+The build args embed the version, short commit hash, and build time into the
+binary via `-ldflags`; they are reported by `headscale version`, `GET /version`
+and `GET /api/v1/update-check`. When omitted, the build date defaults to the
+image build time and the version/commit fall back to `dev`/`unknown`.
 
 The image is a multi-stage build: the headscale binary is compiled with the
 `golang:1.27.0` toolchain and copied into a minimal `debian:trixie-slim`

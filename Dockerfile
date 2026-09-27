@@ -6,7 +6,9 @@
 # docker-compose).
 #
 # Build:
-#   docker build --build-arg VERSION=$(git describe --always --tags --dirty) -t headscale .
+#   docker build --build-arg APP_VERSION=$(git describe --tags --abbrev=0) \
+#                --build-arg APP_COMMIT=$(git rev-parse --short HEAD) \
+#                --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) -t headscale .
 #
 # Run (mount your config and data directory):
 #   docker run --rm -it \
@@ -19,9 +21,16 @@
 # Build stage
 FROM golang:1.27.0-trixie AS builder
 
-ARG APP_VERSION=v0.0.0
-ARG APP_COMMIT=unknown
-ARG BUILD_DATE=2025-09-09
+# Version metadata is injected via -ldflags into the hscontrol/types package.
+# Pass these build args from the build command (see .github/workflows/deploy.yaml):
+#   docker build --build-arg APP_VERSION=$(git describe --tags --abbrev=0) \
+#                --build-arg APP_COMMIT=$(git rev-parse --short HEAD) \
+#                --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) -t headscale .
+# Empty values are left unset so the binary falls back to its defaults; the
+# build date defaults to the image build time when not provided.
+ARG APP_VERSION=
+ARG APP_COMMIT=
+ARG BUILD_DATE=
 ENV GOPATH /go
 WORKDIR /go/src/headscale
 
@@ -32,7 +41,10 @@ RUN go mod download
 # Copy source and build
 COPY . .
 RUN CGO_ENABLED=0 go build -buildmode=pie \
-  -ldflags="-s -w -X 'main.Version=${APP_VERSION}' -X 'main.Commit=${APP_COMMIT}' -X 'main.BuildDate=${BUILD_DATE}'" \
+  -ldflags="-s -w \
+    -X 'github.com/juanfont/headscale/hscontrol/types.Version=${APP_VERSION}' \
+    -X 'github.com/juanfont/headscale/hscontrol/types.Commit=${APP_COMMIT}' \
+    -X 'github.com/juanfont/headscale/hscontrol/types.BuildDate=${BUILD_DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}'" \
   -o /go/bin/headscale ./cmd/headscale
 
 # Runtime stage
