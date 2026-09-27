@@ -49,6 +49,28 @@ keys remain all-access.
 
 # Next
 
+## 0.31.0-arsydoni4326-alt (2026-09-27)
+
+Fork release of the `arsydoni4326-alt` fork. Version numbers in this fork
+always end with `-arsydoni4326-alt`.
+
+### Changes
+
+- Fixed the `golangci-lint` and `treefmt-check` failures reported by the CI
+  (`nix-checks.yml`): wrapped sentinel errors (err113), context-aware HTTP
+  requests in tests (noctx), `any` instead of `interface{}` (modernize),
+  removed `time.Sleep` from the cache-expiry test (forbidigo), split inline
+  error handling (noinlineerr), unnamed returns from `BuildInfo()`
+  (nonamedreturns), string concatenation (perfsprint), `unknownVersion`
+  constant (goconst), dedicated `Deprecated:` paragraphs (gocritic), aligned
+  struct tags (tagalign), and whitespace fixes (nlreturn, wsl_v5) across
+  `hscontrol/updatecheck/`, `hscontrol/api/v1/updatecheck.go`, and
+  `hscontrol/types/version.go`.
+- Added trailing newlines to `SPECIFICATION.md`, `ROADMAP.md`, and
+  `ARCHITECTURE.md` so the treefmt prettier check passes.
+- Updated `headplane` submodule (Dockerfile version args, CHANGELOG `# Next`
+  section).
+
 ## 0.30.0-arsydoni4326-alt (2026-09-27)
 
 Fork release of the `arsydoni4326-alt` fork. Version numbers in this fork

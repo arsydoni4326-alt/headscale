@@ -9,13 +9,15 @@
 //
 // Without ?check=true: returns current version info only (fast, no external call).
 // With    ?check=true: fetches the remote latest release tag from the GitHub API,
-//                      compares it with the running binary's version when the local
-//                      build is a tagged release; falls back to commit-hash comparison
-//                      for dev builds. Results are cached for 15 minutes.
+//
+//	compares it with the running binary's version when the local
+//	build is a tagged release; falls back to commit-hash comparison
+//	for dev builds. Results are cached for 15 minutes.
 package updatecheck
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -43,10 +45,12 @@ const (
 	RemoteRepo = "https://github.com/arsydoni4326-alt/headscale.git"
 
 	// RemoteRepoOwner is the default GitHub owner of the fork.
+	//
 	// Deprecated: kept for backward compatibility; use repoOwner() instead.
 	RemoteRepoOwner = "arsydoni4326-alt"
 
 	// RemoteRepoName is the default GitHub repository name of the fork.
+	//
 	// Deprecated: kept for backward compatibility; use repoName() instead.
 	RemoteRepoName = "headscale"
 
@@ -59,6 +63,21 @@ const (
 
 	// cacheTTL is how long a successful remote check result is cached.
 	cacheTTL = 15 * time.Minute
+
+	// unknownVersion is the fallback value for missing build metadata.
+	unknownVersion = "unknown"
+)
+
+// Sentinel errors returned by the update check package.
+var (
+	errGitHubStatus   = errors.New("github api returned unexpected status")
+	errGitHubEmptySHA = errors.New("github api returned empty sha")
+	errGitHubEmptyTag = errors.New("github api returned empty tag_name")
+	errNotAVersion    = errors.New("not a version string")
+	errVersionParts   = errors.New("version does not have 3 dot-separated parts")
+	errMajorNotNumber = errors.New("major version is not a number")
+	errMinorNotNumber = errors.New("minor version is not a number")
+	errPatchNotNumber = errors.New("patch version is not a number")
 )
 
 // CurrentVersionResponse is the version information for the running binary.
@@ -159,8 +178,10 @@ func initRepoConfig() {
 			Str("repo", repo).
 			Str("env", remoteRepoEnv).
 			Msg("update-check: invalid HEADSCALE_UPDATE_CHECK_REPO, expected owner/repo; using default")
+
 		return
 	}
+
 	repoOwnerVal = owner
 	repoNameVal = name
 }
@@ -209,7 +230,8 @@ func BuildResponse(check bool) UpdateCheckResponse {
 	}
 
 	// Try release version comparison for release builds.
-	if localVer, err := parseVersion(versionInfo.Version); err == nil && !versionInfo.Dirty {
+	localVer, err := parseVersion(versionInfo.Version)
+	if err == nil && !versionInfo.Dirty {
 		resp = tryReleaseComparison(resp, localVer)
 		if resp.Remote != nil || resp.Error != "" {
 			// Release comparison produced a result (success or error).
@@ -236,7 +258,9 @@ func tryReleaseComparison(resp UpdateCheckResponse, localVer semver) UpdateCheck
 			Msg("update-check: failed to fetch latest release")
 
 		updateCheckRemoteFailures.WithLabelValues("release_fetch").Inc()
-		resp.Error = fmt.Sprintf("failed to check remote release: %s", err.Error())
+
+		resp.Error = "failed to check remote release: " + err.Error()
+
 		return resp
 	}
 
@@ -246,6 +270,7 @@ func tryReleaseComparison(resp UpdateCheckResponse, localVer semver) UpdateCheck
 		log.Warn().
 			Str("tag", remoteTag).
 			Msg("update-check: remote release tag is not a valid version, falling back to commit comparison")
+
 		return resp
 	}
 
@@ -256,6 +281,7 @@ func tryReleaseComparison(resp UpdateCheckResponse, localVer semver) UpdateCheck
 		Version: strings.TrimPrefix(remoteTag, "v"),
 		URL:     repoURL(),
 	}
+
 	return resp
 }
 
@@ -269,7 +295,9 @@ func tryCommitComparison(resp UpdateCheckResponse, localCommit string) UpdateChe
 			Msg("update-check: failed to fetch remote commit")
 
 		updateCheckRemoteFailures.WithLabelValues("commit_fetch").Inc()
-		resp.Error = fmt.Sprintf("failed to check remote: %s", err.Error())
+
+		resp.Error = "failed to check remote: " + err.Error()
+
 		return resp
 	}
 
@@ -279,6 +307,7 @@ func tryCommitComparison(resp UpdateCheckResponse, localCommit string) UpdateChe
 		Commit: remoteCommit,
 		URL:    repoURL(),
 	}
+
 	return resp
 }
 
@@ -298,6 +327,7 @@ func Handler() http.HandlerFunc {
 		resp := BuildResponse(check)
 
 		writer.WriteHeader(http.StatusOK)
+
 		err := json.NewEncoder(writer).Encode(resp)
 		if err != nil {
 			log.Error().
@@ -312,6 +342,7 @@ func Handler() http.HandlerFunc {
 func ResetCache() {
 	cacheMu.Lock()
 	defer cacheMu.Unlock()
+
 	clear(cache)
 }
 
@@ -329,12 +360,14 @@ func cachedFetch(key string, ttl time.Duration, fetch func() (string, error)) (s
 	}
 
 	updateCheckCacheMisses.Inc()
+
 	value, err := fetch()
 	if err != nil {
 		return "", err
 	}
 
 	cache[key] = cacheEntry{value: value, fetchedAt: time.Now()}
+
 	return value, nil
 }
 
@@ -353,18 +386,20 @@ func fetchRemoteShortCommit() (string, error) {
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			return "", fmt.Errorf("github api returned status %d", resp.StatusCode)
+			return "", fmt.Errorf("%w: %d", errGitHubStatus, resp.StatusCode)
 		}
 
 		var data struct {
 			SHA string `json:"sha"`
 		}
-		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+
+		err = json.NewDecoder(resp.Body).Decode(&data)
+		if err != nil {
 			return "", fmt.Errorf("failed to decode github api response: %w", err)
 		}
 
 		if data.SHA == "" {
-			return "", fmt.Errorf("github api returned empty sha")
+			return "", errGitHubEmptySHA
 		}
 
 		return shortCommit(data.SHA), nil
@@ -386,18 +421,20 @@ func fetchRemoteLatestRelease() (string, error) {
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			return "", fmt.Errorf("github api returned status %d", resp.StatusCode)
+			return "", fmt.Errorf("%w: %d", errGitHubStatus, resp.StatusCode)
 		}
 
 		var data struct {
 			TagName string `json:"tag_name"`
 		}
-		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+
+		err = json.NewDecoder(resp.Body).Decode(&data)
+		if err != nil {
 			return "", fmt.Errorf("failed to decode github api response: %w", err)
 		}
 
 		if data.TagName == "" {
-			return "", fmt.Errorf("github api returned empty tag_name")
+			return "", errGitHubEmptyTag
 		}
 
 		return data.TagName, nil
@@ -410,17 +447,20 @@ func shortCommit(commit string) string {
 	if len(commit) > 7 {
 		return commit[:7]
 	}
+
 	return commit
 }
 
 // BuildInfo returns the vcs.revision and vcs.time from the build info,
 // falling back to the VersionInfo's commit if build info is unavailable.
 // This is used for embedding additional build metadata.
-func BuildInfo() (revision, time string) {
+func BuildInfo() (string, string) {
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
-		return "unknown", "unknown"
+		return unknownVersion, unknownVersion
 	}
+
+	var revision, time string
 
 	for _, setting := range info.Settings {
 		switch setting.Key {
@@ -432,10 +472,11 @@ func BuildInfo() (revision, time string) {
 	}
 
 	if revision == "" {
-		revision = "unknown"
+		revision = unknownVersion
 	}
+
 	if time == "" {
-		time = "unknown"
+		time = unknownVersion
 	}
 
 	return revision, time
@@ -445,7 +486,7 @@ func BuildInfo() (revision, time string) {
 // or "0.29.9") into a semver struct. Returns an error for non-version strings.
 func parseVersion(s string) (semver, error) {
 	if isDevVersion(s) {
-		return semver{}, fmt.Errorf("not a version string: %q", s)
+		return semver{}, fmt.Errorf("%w: %q", errNotAVersion, s)
 	}
 
 	s = strings.TrimPrefix(s, "v")
@@ -458,20 +499,22 @@ func parseVersion(s string) (semver, error) {
 
 	parts := strings.Split(s, ".")
 	if len(parts) != 3 {
-		return semver{}, fmt.Errorf("version %q does not have 3 dot-separated parts", s)
+		return semver{}, fmt.Errorf("%w: %q", errVersionParts, s)
 	}
 
 	major, err := strconv.Atoi(parts[0])
 	if err != nil {
-		return semver{}, fmt.Errorf("major version %q is not a number", parts[0])
+		return semver{}, fmt.Errorf("%w: %q", errMajorNotNumber, parts[0])
 	}
+
 	minor, err := strconv.Atoi(parts[1])
 	if err != nil {
-		return semver{}, fmt.Errorf("minor version %q is not a number", parts[1])
+		return semver{}, fmt.Errorf("%w: %q", errMinorNotNumber, parts[1])
 	}
+
 	patch, err := strconv.Atoi(parts[2])
 	if err != nil {
-		return semver{}, fmt.Errorf("patch version %q is not a number", parts[2])
+		return semver{}, fmt.Errorf("%w: %q", errPatchNotNumber, parts[2])
 	}
 
 	return semver{major: major, minor: minor, patch: patch, preRelease: pre}, nil
@@ -484,9 +527,10 @@ var pseudoVersionRe = regexp.MustCompile(`^v?[0-9]+\.[0-9]+\.[0-9]+-[0-9]{14}-[0
 
 // isDevVersion reports whether a version string represents a development build.
 func isDevVersion(s string) bool {
-	if s == "" || s == "dev" || s == "unknown" || s == "(devel)" {
+	if s == "" || s == "dev" || s == unknownVersion || s == "(devel)" {
 		return true
 	}
+
 	return pseudoVersionRe.MatchString(s)
 }
 
@@ -509,6 +553,7 @@ func (v semver) GreaterThan(other semver) bool {
 		if v.preRelease == "" {
 			return true
 		}
+
 		if other.preRelease == "" {
 			return false
 		}
