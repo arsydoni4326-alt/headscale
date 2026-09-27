@@ -13,7 +13,7 @@ import (
 // check is a string so the exact "true" (case-insensitive) comparison of the
 // underlying handler is preserved.
 type updateCheckInput struct {
-	Check string `query:"check" doc:"When \"true\", additionally fetch the remote latest commit and compare it with the running binary."`
+	Check string `doc:"When \"true\", additionally fetch the remote latest commit and compare it with the running binary." query:"check"`
 }
 
 type updateCheckOutput struct {

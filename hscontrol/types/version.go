@@ -106,9 +106,11 @@ func buildVersionInfo(
 	if injectedVersion != "" {
 		info.Version = injectedVersion
 	}
+
 	if injectedCommit != "" {
 		info.Commit = injectedCommit
 	}
+
 	if injectedBuildDate != "" {
 		info.BuildTime = injectedBuildDate
 	}
