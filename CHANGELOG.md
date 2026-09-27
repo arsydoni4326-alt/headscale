@@ -49,6 +49,13 @@ keys remain all-access.
 
 # Next
 
+- Docker builds now embed the short commit hash, build time, and version into
+  the binary via `-ldflags` (`hscontrol/types.Version`, `hscontrol/types.Commit`,
+  `hscontrol/types.BuildDate`). The `/version` and `/api/v1/update-check`
+  endpoints now report real values instead of `dev`/`unknown` for container
+  images built by the CI pipeline. The `Makefile` build target embeds the same
+  metadata.
+
 ## 0.29.10-arsydoni4326-alt (2026-09-26)
 
 Fork release of the `arsydoni4326-alt` fork. Version numbers in this fork

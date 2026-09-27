@@ -30,7 +30,11 @@ latestTag=$(git describe --tags `git rev-list --tags --max-count=1`)
 
 git checkout $latestTag
 
-go build -ldflags="-s -w -X github.com/juanfont/headscale/hscontrol/types.Version=$latestTag" -X github.com/juanfont/headscale/hscontrol/types.GitCommitHash=HASH" github.com/juanfont/headscale
+go build -ldflags="-s -w \
+  -X github.com/juanfont/headscale/hscontrol/types.Version=$latestTag \
+  -X github.com/juanfont/headscale/hscontrol/types.Commit=$(git rev-parse --short HEAD) \
+  -X github.com/juanfont/headscale/hscontrol/types.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  -o headscale ./cmd/headscale
 
 # make it executable
 chmod a+x headscale
