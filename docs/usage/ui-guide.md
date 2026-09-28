@@ -127,6 +127,76 @@ flowchart LR
 
 ---
 
+## Accessibility Features
+
+Headscale's web interfaces (both backend-served templates and the Headplane
+UI) are designed to be accessible to all users. This section documents the
+accessibility features and provides guidance for contributors.
+
+### Keyboard Navigation
+
+All interactive elements can be accessed and operated using only a keyboard:
+
+- **Tab / Shift+Tab** — Navigate between interactive elements
+- **Enter / Space** — Activate buttons, links, and form controls
+- **Arrow keys** — Navigate within select menus, radio groups, and custom controls
+- **Esc** — Close modals and dialogs
+
+All interactive elements have visible focus indicators (rings) to show the
+current keyboard focus position.
+
+### Screen Reader Support
+
+All UI elements provide appropriate semantic information for screen readers:
+
+- **Semantic HTML** — Proper use of `<button>`, `<form>`, `<nav>`, heading hierarchy
+- **ARIA labels** — All icon-only buttons and controls have accessible names via `aria-label`
+- **ARIA roles** — Dynamic content uses `role="alert"` and `aria-live` for announcements
+- **Alternative text** — Images and icons have descriptive text or are marked decorative with `aria-hidden="true"`
+
+### Visual Accessibility
+
+- **Color contrast** — All text and interactive elements meet WCAG 2.1 AA contrast requirements (4.5:1 for normal text, 3:1 for large text)
+- **Dark mode** — Full dark mode support with appropriate contrast in both themes
+- **Focus indicators** — High-visibility focus rings on all interactive elements
+- **Link styling** — Links are underlined to avoid relying on color alone
+- **Touch targets** — Interactive elements meet minimum size requirements (44×44px on mobile)
+
+### Forms and Validation
+
+- **Associated labels** — All form inputs have visible labels or `aria-label` attributes
+- **Error messages** — Validation errors are announced to screen readers via `aria-live` regions
+- **Required fields** — Required inputs are marked and announced appropriately
+- **Placeholder text** — Used only for hints, never as the sole label
+
+### Testing
+
+The Headplane UI includes automated accessibility testing:
+
+- **axe-core** — Automated scans for critical and serious WCAG violations in CI/CD
+- **Playwright e2e tests** — Include accessibility checks on all major pages
+- **Component tests** — Verify keyboard navigation, focus management, and ARIA attributes
+
+### Known Limitations
+
+- **Full WCAG validation** — Automated testing catches many issues, but full WCAG 2.1 AA conformance requires manual testing with assistive technologies
+- **Dynamic content** — Some complex interactions (drag-and-drop in topology view) may have reduced screen reader support
+- **Third-party components** — Some upstream components (`@base-ui/react`) use non-standard patterns (e.g., `aria-disabled` instead of `disabled` attribute)
+
+### Reporting Accessibility Issues
+
+If you encounter an accessibility barrier, please report it via the
+[GitHub issue tracker](https://github.com/arsydoni4326-alt/headscale/issues).
+Include:
+
+- Description of the issue
+- The page/component affected
+- Your assistive technology (screen reader, keyboard-only navigation, etc.)
+- Steps to reproduce
+- Expected behavior
+
+---
+
 ## Contributing to this guide
 
 - **Add a new page:** Follow the table format in [Pages and states](#pages-and-states).
@@ -149,3 +219,4 @@ Before each release, verify that:
 - [ ] No broken image links exist.
 - [ ] Flow diagrams match the current user experience.
 - [ ] Any new UI pages or states are documented.
+- [ ] Accessibility features remain functional and documented.

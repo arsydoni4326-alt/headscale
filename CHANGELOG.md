@@ -51,6 +51,13 @@ keys remain all-access.
 
 ### Changes
 
+- **Phase 8: UI/UX and Accessibility Refinement**:
+  - Documentation: Added comprehensive accessibility section to
+    `docs/usage/ui-guide.md` covering keyboard navigation, screen reader
+    support, visual accessibility, forms and validation, testing, known
+    limitations, and reporting process.
+  - Updated ROADMAP.md: Phase 8 status changed from [Proposed] to [In Progress].
+  - Updated maintenance checklist to include accessibility verification.
 - **Phase 7: Testing and Technical Hardening**:
   - Backend: Wired `DisableUpdateCheck` into the fork's update-check endpoint.
     When `disable_check_updates: true` is set, the endpoint skips the remote
