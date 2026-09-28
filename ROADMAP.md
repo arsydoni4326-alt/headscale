@@ -108,13 +108,9 @@ See [CHANGELOG](./CHANGELOG.md) for the list of changes in this phase.
 
 See [CHANGELOG](./CHANGELOG.md) for the list of changes in this phase.
 
-## Phase 6 — Community and Ecosystem
+## Phase 6 — Community and Ecosystem (Completed)
 
-- Issue templates for feature requests, bug reports, and UX feedback.
-- Contribution guide updates covering the fork-specific features and the
-  feature-preservation rule.
-- Keep this roadmap and the headplane roadmap in sync when items move between
-  Planned and In Progress.
+See [CHANGELOG](./CHANGELOG.md) for the list of changes in this phase.
 
 ## Tracking
 
@@ -123,3 +119,20 @@ See [CHANGELOG](./CHANGELOG.md) for the list of changes in this phase.
   update this document in the same change as the implementation.
 - Completed items are removed from this document and recorded in the
   [CHANGELOG](./CHANGELOG.md) instead.
+
+### Headplane roadmap sync
+
+The Headplane frontend maintains its own roadmap at
+[`headplane/docs/ROADMAP.md`](./headplane/docs/ROADMAP.md). Items that span
+both backend and frontend (e.g. new API endpoints with UI pages) must be
+tracked in **both** roadmaps. When an item moves between Planned and In
+Progress:
+
+1. Update this roadmap (Headscale) in the implementation commit.
+2. Update `headplane/docs/ROADMAP.md` in the corresponding Headplane commit.
+3. If the item spans a single release that includes both repos, the release
+   notes should reference both roadmap updates.
+
+The headplane roadmap follows the same lifecycle: Planned → In Progress →
+removed (recorded in its CHANGELOG). Keep the status labels consistent across
+both documents.

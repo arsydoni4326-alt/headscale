@@ -49,6 +49,29 @@ keys remain all-access.
 
 # Next
 
+## 0.34.0-arsydoni4326-alt (2026-09-29)
+
+Fork release of the `arsydoni4326-alt` fork. Version numbers in this fork
+always end with `-arsydoni4326-alt`.
+
+### Changes
+
+- **Phase 6: Community and Ecosystem**:
+  - Added a UX feedback issue template (`.github/ISSUE_TEMPLATE/ux_feedback.yaml`)
+    for UI/UX feedback on Headplane.
+  - Updated `CONTRIBUTING.md` with:
+    - A comprehensive list of fork-specific features (update-check, version
+      suffix, DERP endpoint, audit log, topology, bulk operations,
+      export/import, version compatibility tracking).
+    - The feature-preservation rule and the CI gate that protects fork-specific
+      paths from accidental removal during upstream merges.
+    - Fork repository targets and submodule pinning guidance.
+    - Community links (Discord, issue tracker, Code of Conduct).
+  - Updated `ROADMAP.md`: Phase 6 marked Completed; added a "Headplane roadmap
+    sync" section documenting the process for keeping both roadmaps consistent
+    when items span backend and frontend.
+  - Updated `session.md` with Phase 6 progress.
+
 ## 0.33.0-arsydoni4326-alt (2026-09-28)
 
 Fork release of the `arsydoni4326-alt` fork. Version numbers in this fork
