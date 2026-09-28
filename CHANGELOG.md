@@ -49,11 +49,19 @@ keys remain all-access.
 
 # Next
 
-## Changes
+## 0.32.0-arsydoni4326-alt (2026-09-28)
+
+Fork release of the `arsydoni4326-alt` fork. Version numbers in this fork
+always end with `-arsydoni4326-alt`.
+
+### Changes
 
 - Added a read-only `GET /api/v1/derp` endpoint that returns the current DERP
   relay map configuration (regions, nodes, DERP/STUN ports, IPv4/IPv6). This
   powers the DERP status page in Headplane.
+- Updated `headplane` submodule to `v0.8.0-arsydoni4326-alt` (Phase 4 feature
+  expansion: audit log, DERP status, topology, bulk operations, export/import,
+  version compatibility tracking).
 
 ## 0.31.0-arsydoni4326-alt (2026-09-27)
 
