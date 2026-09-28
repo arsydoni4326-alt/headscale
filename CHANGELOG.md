@@ -49,6 +49,13 @@ keys remain all-access.
 
 # Next
 
+## 0.34.0-arsydoni4326-alt (2026-09-29)
+
+Fork release of the `arsydoni4326-alt` fork. Version numbers in this fork
+always end with `-arsydoni4326-alt`.
+
+### Changes
+
 - **Phase 6: Community and Ecosystem**:
   - Added a UX feedback issue template (`.github/ISSUE_TEMPLATE/ux_feedback.yaml`)
     for UI/UX feedback on Headplane.
