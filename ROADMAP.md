@@ -104,16 +104,9 @@ See [CHANGELOG](./CHANGELOG.md) for the list of changes in this phase.
 
 See [CHANGELOG](./CHANGELOG.md) for the list of changes in this phase.
 
-## Phase 5 — Testing, Performance, and CI/CD
+## Phase 5 — Testing, Performance, and CI/CD (Completed)
 
-- Frontend end-to-end tests (Playwright) for critical flows: login, machine
-  management, ACL editing, DNS settings.
-- Accessibility tests (axe-core) wired into CI.
-- Lighthouse CI with performance budgets for the main routes.
-- Bundle-size analysis and code splitting; lazy-load the WASM SSH payload so it
-  is only fetched when the SSH page is opened.
-- Backend tests for the update-check endpoint edge cases (see Phase 2).
-- CI gate that fails on missing fork-specific features (see Phase 1).
+See [CHANGELOG](./CHANGELOG.md) for the list of changes in this phase.
 
 ## Phase 6 — Community and Ecosystem
 

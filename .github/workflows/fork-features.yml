@@ -22,5 +22,7 @@ jobs:
       - name: Verify fork-specific features exist
         run: |
           test -d hscontrol/updatecheck || { echo "❌ hscontrol/updatecheck/ is missing"; exit 1; }
+          test -f hscontrol/api/v1/updatecheck.go || { echo "❌ hscontrol/api/v1/updatecheck.go is missing"; exit 1; }
+          test -f hscontrol/api/v1/derp.go || { echo "❌ hscontrol/api/v1/derp.go is missing"; exit 1; }
           test -d headplane/app/update-check || { echo "❌ headplane/app/update-check/ is missing"; exit 1; }
           echo "✅ All fork-specific features are present."

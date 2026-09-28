@@ -49,6 +49,18 @@ keys remain all-access.
 
 # Next
 
+## Changes
+
+- **Phase 5: Testing, Performance, and CI/CD**:
+  - Backend: added deterministic edge-case tests for the update-check endpoint
+    (GitHub API non-200/empty/malformed responses, cache behavior, repo-config
+    env var handling, release/commit comparison fallbacks). The GitHub API base
+    URL is now a package variable so tests can point it at a local server.
+  - CI: the fork-features gate now also verifies `hscontrol/api/v1/updatecheck.go`
+    and `hscontrol/api/v1/derp.go` survive upstream merges.
+  - Updated `headplane` submodule to include the Phase 5 frontend work (Playwright
+    e2e + axe-core accessibility tests, Lighthouse CI, bundle-size analysis).
+
 ## 0.32.0-arsydoni4326-alt (2026-09-28)
 
 Fork release of the `arsydoni4326-alt` fork. Version numbers in this fork

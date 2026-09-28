@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -63,6 +64,13 @@ func TestHandler_WithoutCheckParam(t *testing.T) {
 
 func TestHandler_WithCheckParam(t *testing.T) {
 	ResetCache()
+	resetRepoConfigForTest()
+	t.Setenv(remoteRepoEnv, "")
+
+	withTestAPI(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"sha": "abcdef1234567890"}`))
+	})
 
 	handler := Handler()
 
@@ -93,10 +101,18 @@ func TestHandler_WithCheckParam(t *testing.T) {
 		t.Error("expected current.commit to be non-empty")
 	}
 
-	// With ?check=true, remote may be nil (if GitHub API is unreachable in test)
-	// but should not return an error about missing check param
+	// With ?check=true and a deterministic test API, the remote check should
+	// succeed and report whether an update is available.
+	if body.Remote == nil {
+		t.Error("expected remote to be set with ?check=true")
+	}
+
 	if body.Error != "" {
-		t.Logf("remote check error (expected in test env): %s", body.Error)
+		t.Errorf("expected no error, got %q", body.Error)
+	}
+
+	if body.UpdateAvailable == nil {
+		t.Error("expected updateAvailable to be set with ?check=true")
 	}
 }
 
@@ -426,14 +442,25 @@ func TestBuildResponse_WithCheck_NoExternalCall(t *testing.T) {
 
 func TestBuildResponse_DevVersion(t *testing.T) {
 	// In test environments, the version is typically "dev" or "(devel)".
-	// BuildResponse should handle this gracefully.
+	// BuildResponse should handle this gracefully and fall back to commit
+	// comparison against the deterministic test API.
 	ResetCache()
+	resetRepoConfigForTest()
+	t.Setenv(remoteRepoEnv, "")
+
+	withTestAPI(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"sha": "abcdef1234567890"}`))
+	})
 
 	resp := BuildResponse(true)
 
-	// Should either succeed (if GitHub is reachable) or return an error
 	if resp.Error != "" {
-		t.Logf("remote check error (expected in test env): %s", resp.Error)
+		t.Errorf("expected no error, got %q", resp.Error)
+	}
+
+	if resp.Remote == nil {
+		t.Error("expected remote to be set for dev build commit comparison")
 	}
 
 	// Always has current version info
@@ -491,32 +518,339 @@ func TestParseVersion_GoModPseudoVersion(t *testing.T) {
 	}
 }
 
-// TestFetchRemoteShortCommit_MalformedResponse verifies the JSON decoder
-// handles unexpected types in the GitHub API response.
-func TestFetchRemoteShortCommit_MalformedResponse(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"sha": 123}`)) // sha is a number, not string — type mismatch
-	}))
-	defer server.Close()
+// TestFetchRemoteShortCommit_MalformedJSON verifies the fetch function returns
+// an error when the GitHub API response is not valid JSON.
+func TestFetchRemoteShortCommit_MalformedJSON(t *testing.T) {
+	ResetCache()
+	resetRepoConfigForTest()
+	t.Setenv(remoteRepoEnv, "")
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL, nil)
+	withTestAPI(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"sha": `)) // truncated JSON
+	})
+
+	_, err := fetchRemoteShortCommit()
+	if err == nil {
+		t.Fatal("expected error for malformed JSON")
+	}
+}
+
+// --- Deterministic GitHub API fetch tests ---
+
+// withTestAPI points the GitHub API base URL at a local httptest server for
+// the duration of the test and restores it afterwards.
+func withTestAPI(t *testing.T, handler http.HandlerFunc) {
+	t.Helper()
+
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+
+	orig := apiBaseURL
+	apiBaseURL = server.URL
+
+	t.Cleanup(func() { apiBaseURL = orig })
+}
+
+// resetRepoConfigForTest reinitializes the repo-config sync.Once so tests can
+// exercise different HEADSCALE_UPDATE_CHECK_REPO values. Tests in this package
+// run sequentially, so reassigning the package-level Once is safe.
+func resetRepoConfigForTest() {
+	repoConfig = sync.Once{}
+	repoOwnerVal = ""
+	repoNameVal = ""
+}
+
+func TestFetchRemoteShortCommit_Success(t *testing.T) {
+	ResetCache()
+	resetRepoConfigForTest()
+	t.Setenv(remoteRepoEnv, "")
+
+	withTestAPI(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/repos/arsydoni4326-alt/headscale/commits/main" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"sha": "abcdef1234567890"}`))
+	})
+
+	got, err := fetchRemoteShortCommit()
 	if err != nil {
-		t.Fatalf("failed to create request: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("http get failed: %v", err)
+	if got != "abcdef1" {
+		t.Errorf("fetchRemoteShortCommit() = %q, want %q", got, "abcdef1")
 	}
-	defer resp.Body.Close()
+}
 
-	var data struct {
-		SHA string `json:"sha"`
+func TestFetchRemoteShortCommit_Non200(t *testing.T) {
+	ResetCache()
+	resetRepoConfigForTest()
+	t.Setenv(remoteRepoEnv, "")
+
+	withTestAPI(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden) // 403 rate limit
+	})
+
+	_, err := fetchRemoteShortCommit()
+	if err == nil {
+		t.Fatal("expected error for non-200 status")
 	}
 
-	err = json.NewDecoder(resp.Body).Decode(&data)
+	if !errors.Is(err, errGitHubStatus) {
+		t.Errorf("expected errGitHubStatus, got %v", err)
+	}
+}
+
+func TestFetchRemoteLatestRelease_Success(t *testing.T) {
+	ResetCache()
+	resetRepoConfigForTest()
+	t.Setenv(remoteRepoEnv, "")
+
+	withTestAPI(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/repos/arsydoni4326-alt/headscale/releases/latest" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"tag_name": "v0.30.0-arsydoni4326-alt"}`))
+	})
+
+	got, err := fetchRemoteLatestRelease()
 	if err != nil {
-		t.Logf("expected malformed JSON error: %v", err)
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got != "v0.30.0-arsydoni4326-alt" {
+		t.Errorf("fetchRemoteLatestRelease() = %q, want %q", got, "v0.30.0-arsydoni4326-alt")
+	}
+}
+
+func TestFetchRemoteLatestRelease_Non200(t *testing.T) {
+	ResetCache()
+	resetRepoConfigForTest()
+	t.Setenv(remoteRepoEnv, "")
+
+	withTestAPI(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+
+	_, err := fetchRemoteLatestRelease()
+	if !errors.Is(err, errGitHubStatus) {
+		t.Errorf("expected errGitHubStatus, got %v", err)
+	}
+}
+
+func TestFetchRemoteLatestRelease_EmptyTag(t *testing.T) {
+	ResetCache()
+	resetRepoConfigForTest()
+	t.Setenv(remoteRepoEnv, "")
+
+	withTestAPI(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	})
+
+	_, err := fetchRemoteLatestRelease()
+	if !errors.Is(err, errGitHubEmptyTag) {
+		t.Errorf("expected errGitHubEmptyTag, got %v", err)
+	}
+}
+
+func TestFetchRemoteLatestRelease_MalformedJSON(t *testing.T) {
+	ResetCache()
+	resetRepoConfigForTest()
+	t.Setenv(remoteRepoEnv, "")
+
+	withTestAPI(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`not json`))
+	})
+
+	_, err := fetchRemoteLatestRelease()
+	if err == nil {
+		t.Fatal("expected error for malformed JSON")
+	}
+}
+
+// --- Repo config tests ---
+
+func TestRepoConfig_Default(t *testing.T) {
+	resetRepoConfigForTest()
+	t.Setenv(remoteRepoEnv, "")
+
+	if got := repoOwner(); got != DefaultRemoteRepoOwner {
+		t.Errorf("repoOwner() = %q, want %q", got, DefaultRemoteRepoOwner)
+	}
+
+	if got := repoName(); got != DefaultRemoteRepoName {
+		t.Errorf("repoName() = %q, want %q", got, DefaultRemoteRepoName)
+	}
+}
+
+func TestRepoConfig_ValidEnv(t *testing.T) {
+	resetRepoConfigForTest()
+	t.Setenv(remoteRepoEnv, "octocat/hello-world")
+
+	if got := repoOwner(); got != "octocat" {
+		t.Errorf("repoOwner() = %q, want %q", got, "octocat")
+	}
+
+	if got := repoName(); got != "hello-world" {
+		t.Errorf("repoName() = %q, want %q", got, "hello-world")
+	}
+}
+
+func TestRepoConfig_InvalidEnv(t *testing.T) {
+	for _, repo := range []string{"no-slash", "/missing-owner", "missing-name/"} {
+		t.Run(repo, func(t *testing.T) {
+			resetRepoConfigForTest()
+			t.Setenv(remoteRepoEnv, repo)
+
+			if got := repoOwner(); got != DefaultRemoteRepoOwner {
+				t.Errorf("repoOwner() = %q, want default %q", got, DefaultRemoteRepoOwner)
+			}
+
+			if got := repoName(); got != DefaultRemoteRepoName {
+				t.Errorf("repoName() = %q, want default %q", got, DefaultRemoteRepoName)
+			}
+		})
+	}
+}
+
+func TestRepoConfig_ExtraSlash(t *testing.T) {
+	// strings.Cut splits on the first slash, so "a/b/c" is accepted with
+	// owner="a" and name="b/c". Document the actual behavior.
+	resetRepoConfigForTest()
+	t.Setenv(remoteRepoEnv, "a/b/c")
+
+	if got := repoOwner(); got != "a" {
+		t.Errorf("repoOwner() = %q, want %q", got, "a")
+	}
+
+	if got := repoName(); got != "b/c" {
+		t.Errorf("repoName() = %q, want %q", got, "b/c")
+	}
+}
+
+// --- Comparison helpers ---
+
+func TestTryReleaseComparison_InvalidRemoteTag(t *testing.T) {
+	ResetCache()
+	resetRepoConfigForTest()
+	t.Setenv(remoteRepoEnv, "")
+
+	withTestAPI(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"tag_name": "not-a-version"}`))
+	})
+
+	localVer, err := parseVersion("0.29.9")
+	if err != nil {
+		t.Fatalf("parseVersion: %v", err)
+	}
+
+	resp := tryReleaseComparison(UpdateCheckResponse{}, localVer)
+
+	if resp.Remote != nil {
+		t.Error("expected Remote to be nil (fallback to commit comparison)")
+	}
+
+	if resp.Error != "" {
+		t.Errorf("expected no error, got %q", resp.Error)
+	}
+}
+
+func TestTryReleaseComparison_Success(t *testing.T) {
+	ResetCache()
+	resetRepoConfigForTest()
+	t.Setenv(remoteRepoEnv, "")
+
+	withTestAPI(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"tag_name": "v0.30.0-arsydoni4326-alt"}`))
+	})
+
+	localVer, err := parseVersion("0.29.9")
+	if err != nil {
+		t.Fatalf("parseVersion: %v", err)
+	}
+
+	resp := tryReleaseComparison(UpdateCheckResponse{}, localVer)
+
+	if resp.Remote == nil {
+		t.Fatal("expected Remote to be set")
+	}
+
+	if resp.UpdateAvailable == nil || !*resp.UpdateAvailable {
+		t.Error("expected updateAvailable=true (0.30.0 > 0.29.9)")
+	}
+
+	if resp.Remote.Version != "0.30.0-arsydoni4326-alt" {
+		t.Errorf("remote version = %q, want %q", resp.Remote.Version, "0.30.0-arsydoni4326-alt")
+	}
+}
+
+func TestTryCommitComparison_Success(t *testing.T) {
+	ResetCache()
+	resetRepoConfigForTest()
+	t.Setenv(remoteRepoEnv, "")
+
+	withTestAPI(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"sha": "abcdef1234567890"}`))
+	})
+
+	resp := tryCommitComparison(UpdateCheckResponse{}, "1111111")
+
+	if resp.Remote == nil {
+		t.Fatal("expected Remote to be set")
+	}
+
+	if resp.UpdateAvailable == nil || !*resp.UpdateAvailable {
+		t.Error("expected updateAvailable=true (remote commit differs)")
+	}
+
+	if resp.Remote.Commit != "abcdef1" {
+		t.Errorf("remote commit = %q, want %q", resp.Remote.Commit, "abcdef1")
+	}
+}
+
+func TestTryCommitComparison_NoUpdate(t *testing.T) {
+	ResetCache()
+	resetRepoConfigForTest()
+	t.Setenv(remoteRepoEnv, "")
+
+	withTestAPI(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"sha": "abcdef1234567890"}`))
+	})
+
+	resp := tryCommitComparison(UpdateCheckResponse{}, "abcdef1234567890")
+
+	if resp.UpdateAvailable == nil || *resp.UpdateAvailable {
+		t.Error("expected updateAvailable=false (same commit)")
+	}
+}
+
+func TestTryCommitComparison_Error(t *testing.T) {
+	ResetCache()
+	resetRepoConfigForTest()
+	t.Setenv(remoteRepoEnv, "")
+
+	withTestAPI(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+
+	resp := tryCommitComparison(UpdateCheckResponse{}, "1111111")
+
+	if resp.Error == "" {
+		t.Error("expected error to be set")
+	}
+
+	if resp.Remote != nil {
+		t.Error("expected Remote to be nil on error")
 	}
 }
