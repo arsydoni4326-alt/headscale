@@ -191,14 +191,18 @@ func repoURL() string {
 	return fmt.Sprintf("https://github.com/%s/%s", repoOwner(), repoName())
 }
 
+// apiBaseURL is the base URL for the GitHub API. It is a variable so tests can
+// point the fetch functions at a local httptest server.
+var apiBaseURL = "https://api.github.com"
+
 // commitAPIURL returns the GitHub API URL for the latest commit on main.
 func commitAPIURL() string {
-	return fmt.Sprintf("https://api.github.com/repos/%s/%s/commits/main", repoOwner(), repoName())
+	return fmt.Sprintf("%s/repos/%s/%s/commits/main", apiBaseURL, repoOwner(), repoName())
 }
 
 // releaseAPIURL returns the GitHub API URL for the latest release.
 func releaseAPIURL() string {
-	return fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", repoOwner(), repoName())
+	return fmt.Sprintf("%s/repos/%s/%s/releases/latest", apiBaseURL, repoOwner(), repoName())
 }
 
 // BuildResponse builds the update check response.
