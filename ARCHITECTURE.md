@@ -61,6 +61,9 @@ server together. Key subsystems:
 - **`api/v1/`** and **`api/v2/`** — code-first Huma implementations of the
   REST APIs; Huma emits the OpenAPI 3.1 documents from the Go definitions.
 - **`updatecheck/`** — the fork-specific update-check package (see below).
+- **`api/v1/derp.go`** — the read-only `GET /api/v1/derp` endpoint added in
+  Phase 4, which returns the current DERP relay map (regions, nodes, ports,
+  IPs) from `State.DERPMap()`.
 
 ### Headplane web UI (`headplane/`)
 
@@ -69,6 +72,26 @@ Headscale over its REST API and provides machine management, ACL editing, DNS
 settings, and browser SSH. See
 [`headplane/docs/ARCHITECTURE.md`](./headplane/docs/ARCHITECTURE.md) for
 details.
+
+Phase 4 added the following Headplane-side subsystems:
+
+- **Audit log** (`headplane/app/server/audit/`) — records changes made through
+  the UI into a local SQLite `audit_log` table (drizzle). Action handlers
+  (machines, ACL, DNS, auth keys, users) call `audit.record()` after a
+  successful mutation; the `/audit` page lists entries with filters and
+  pagination.
+- **Topology view** (`headplane/app/utils/topology.ts` +
+  `headplane/app/components/topology/`) — a deterministic SVG layout of the
+  tailnet grouped by owner, with subnet routers, exit-node highlighting,
+  pan/zoom, and click-through to machine details.
+- **Compatibility registry** (`headplane/app/server/headscale/compatibility.ts`)
+  — maps Headplane features to the minimum Headscale version they require.
+  The settings page and feature pages surface unsupported features.
+- **DERP status page** (`headplane/app/routes/derp/`) — reads the
+  `GET /api/v1/derp` endpoint and renders region/node cards.
+- **Export/import** (`headplane/app/routes/settings/export/`) — downloads the
+  Headscale configuration (YAML or JSON bundle) and the ACL policy, and
+  accepts an uploaded bundle for import.
 
 ### Update check (`hscontrol/updatecheck/` + `headplane/app/update-check/`)
 
@@ -79,6 +102,7 @@ if removed by an upstream merge. The frontend domain
 (`headplane/app/update-check/`) mirrors this design on the Headplane side.
 
 The backend features:
+
 - **Server-side caching** — GitHub API responses are cached for 15 minutes
   (mutex-protected with singleflight behavior) to stay within unauthenticated
   rate limits.
@@ -91,6 +115,7 @@ The backend features:
 - **Prometheus metrics** — Request count, remote-failure count, cache hit/miss.
 
 The frontend features:
+
 - **sessionStorage caching** — Results are cached for 15 minutes; manual checks
   bypass the cache.
 - **Dismiss/remind controls** — "Dismiss for this session" and "Remind me
@@ -120,12 +145,12 @@ The frontend features:
 
 ## Key Design Decisions
 
-| Decision | Rationale | Trade-off |
-| --- | --- | --- |
-| Code-first Huma APIs (`api/v1`, `api/v2`) | OpenAPI spec is generated from the handlers, so it cannot drift | Spec emission requires building the API with a zero Backend |
-| Self-contained update-check package | An upstream merge cannot silently delete the feature; it is restorable as a unit | The package is fork-specific and must be re-applied after upstream merges |
-| Headplane as a submodule | The frontend is versioned and released independently | CI must check out submodules to verify frontend features |
-| `-arsydoni4326-alt` version suffix | Identifies fork releases unambiguously | Version numbers diverge from upstream |
+| Decision                                  | Rationale                                                                        | Trade-off                                                                 |
+| ----------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Code-first Huma APIs (`api/v1`, `api/v2`) | OpenAPI spec is generated from the handlers, so it cannot drift                  | Spec emission requires building the API with a zero Backend               |
+| Self-contained update-check package       | An upstream merge cannot silently delete the feature; it is restorable as a unit | The package is fork-specific and must be re-applied after upstream merges |
+| Headplane as a submodule                  | The frontend is versioned and released independently                             | CI must check out submodules to verify frontend features                  |
+| `-arsydoni4326-alt` version suffix        | Identifies fork releases unambiguously                                           | Version numbers diverge from upstream                                     |
 
 ## Constraints and Dependencies
 

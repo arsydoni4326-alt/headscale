@@ -73,6 +73,61 @@ migration path.
 
 - **FR-2.1**: All version numbers end with the suffix `-arsydoni4326-alt`.
 
+### FR-3: Audit log
+
+- **FR-3.1**: Headplane records an audit trail of changes made through its UI:
+  machine operations (register, rename, expire, delete, tags, routes,
+  reassign), ACL policy updates, DNS setting changes, pre-auth key creation
+  and expiry, and user management actions.
+- **FR-3.2**: Each entry records the actor (user or API key), the action, the
+  affected resource, a JSON details payload, and a timestamp.
+- **FR-3.3**: The audit log is viewable in the Headplane UI at `/audit`, with
+  filters by action and actor, and pagination.
+- **FR-3.4**: Actions performed directly against the Headscale API or CLI are
+  not recorded (Headscale has no audit API); this is a documented limitation.
+
+### FR-4: DERP status
+
+- **FR-4.1**: `GET /api/v1/derp` returns the current DERP relay map
+  configuration: whether DERP is configured, the total region count, and each
+  region's ID, name, code, and nodes (name, hostname, DERP/STUN ports, IPv4,
+  IPv6).
+- **FR-4.2**: The Headplane UI shows a DERP status page at `/derp` with summary
+  cards and per-region node details.
+- **FR-4.3**: When the server does not expose the DERP endpoint (older
+  version), the page degrades gracefully with a compatibility notice.
+
+### FR-5: Network topology visualization
+
+- **FR-5.1**: The Headplane UI shows a visual topology of the tailnet at
+  `/topology`, grouping nodes by owner and highlighting subnet routers, exit
+  nodes, online/offline state, and expiry.
+- **FR-5.2**: The topology supports pan/zoom, hover tooltips, click-through to
+  machine details, and filters by owner and online state.
+
+### FR-6: Bulk machine operations
+
+- **FR-6.1**: Machines can be multi-selected in the Headplane machines page and
+  expired, deleted, or re-tagged in bulk.
+- **FR-6.2**: Bulk actions require write permission on every selected machine
+  and record a single audit entry per action.
+
+### FR-7: Export/import
+
+- **FR-7.1**: The ACL policy can be exported as a HuJSON file and imported from
+  a file into the editor.
+- **FR-7.2**: The Headscale configuration can be exported as YAML or as a JSON
+  bundle, and a previously exported bundle can be uploaded for import.
+
+### FR-8: Version compatibility tracking
+
+- **FR-8.1**: Headplane maintains a registry of features and the minimum
+  Headscale version each requires.
+- **FR-8.2**: The settings page shows the connected Headscale version and lists
+  features unavailable on that version.
+- **FR-8.3**: Pages that depend on newer endpoints (e.g. DERP status) show a
+  compatibility notice instead of failing when the server is too old.
+
 ## Non-Functional Requirements
 
 ### NFR-1: Compatibility

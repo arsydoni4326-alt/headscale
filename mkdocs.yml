@@ -179,6 +179,10 @@ nav:
   - Usage:
       - Getting started: usage/getting-started.md
       - UI Guide: usage/ui-guide.md
+      - Audit Log: usage/audit-log.md
+      - DERP Status: usage/derp-status.md
+      - Topology: usage/topology.md
+      - Export / Import: usage/export-import.md
       - Connect a node:
           - Android: usage/connect/android.md
           - Apple: usage/connect/apple.md

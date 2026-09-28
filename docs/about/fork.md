@@ -42,6 +42,23 @@ Results are cached in `sessionStorage` for 15 minutes. The modal includes
 "Dismiss for this session" and "Remind me later (24h)" options, and a direct
 link to the release notes when a tag-based update is detected.
 
+## Phase 4 features
+
+Phase 4 added a set of management features spanning the backend and Headplane:
+
+- **DERP status endpoint** — `GET /api/v1/derp` returns the current DERP relay
+  map (regions, nodes, ports, IPs). See the [API reference](../ref/api.md#derp-map).
+- **Audit log** — Headplane records changes made through its UI (machines,
+  ACL, DNS, auth keys, users) into a local SQLite table, viewable at `/audit`.
+- **Network topology** — Headplane renders the tailnet as an interactive SVG
+  graph at `/topology`.
+- **Bulk machine operations** — multi-select expire/delete/tag in the machines
+  page.
+- **Export/import** — ACL policy and Headscale configuration export/import for
+  backup and migration.
+- **Version compatibility tracking** — Headplane surfaces features that are
+  unavailable on the connected Headscale version.
+
 ## Feature preservation
 
 All fork-specific features are load-bearing and must survive upstream merges.
