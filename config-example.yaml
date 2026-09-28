@@ -134,6 +134,9 @@ derp:
 
 # Disables the automatic check for headscale updates on startup
 disable_check_updates: false
+# When true, the fork's update-check endpoint (/api/v1/update-check) skips the
+# remote comparison and returns the running binary's version info only, even
+# when ?check=true is requested.
 
 # Remote repository for the update-check endpoint (/api/v1/update-check).
 # Overrides the default (arsydoni4326-alt/headscale).

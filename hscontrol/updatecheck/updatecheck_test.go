@@ -430,13 +430,45 @@ func TestBuildResponse_WithCheck_NoExternalCall(t *testing.T) {
 	// Without ?check=true, BuildResponse should never make external calls.
 	ResetCache()
 
-	resp := BuildResponse(false)
+	resp := BuildResponse(false, false)
 	if resp.Remote != nil {
 		t.Error("expected remote to be nil when check=false")
 	}
 
 	if resp.UpdateAvailable != nil {
 		t.Error("expected updateAvailable to be nil when check=false")
+	}
+}
+
+func TestBuildResponse_Disabled(t *testing.T) {
+	// When disabled=true (disable_check_updates), the remote check is skipped
+	// even when check=true: no external call is made and only version info is
+	// returned.
+	ResetCache()
+	resetRepoConfigForTest()
+	t.Setenv(remoteRepoEnv, "")
+
+	withTestAPI(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("remote check must not be performed when disabled")
+	})
+
+	resp := BuildResponse(true, true)
+
+	if resp.Error != "" {
+		t.Errorf("expected no error, got %q", resp.Error)
+	}
+
+	if resp.Remote != nil {
+		t.Error("expected remote to be nil when disabled")
+	}
+
+	if resp.UpdateAvailable != nil {
+		t.Error("expected updateAvailable to be nil when disabled")
+	}
+
+	// Always has current version info
+	if resp.Current.Version == "" {
+		t.Error("expected current.version to be non-empty")
 	}
 }
 
@@ -453,7 +485,7 @@ func TestBuildResponse_DevVersion(t *testing.T) {
 		_, _ = w.Write([]byte(`{"sha": "abcdef1234567890"}`))
 	})
 
-	resp := BuildResponse(true)
+	resp := BuildResponse(true, false)
 
 	if resp.Error != "" {
 		t.Errorf("expected no error, got %q", resp.Error)

@@ -36,19 +36,38 @@ backend (`hscontrol/updatecheck/`) and the Headplane frontend
 (`headplane/app/update-check/`). The roadmap is organized into phases that
 harden what exists today before expanding into new territory.
 
-## Phase 1 — Foundation and Documentation
+### Status legend
 
-- Create root-level `SPECIFICATION.md` and `ARCHITECTURE.md` describing the fork
-  as a whole (backend + frontend), including the fork-specific features and the
-  feature-preservation rule above.
-- Add a CI check that verifies `hscontrol/updatecheck/` and
-  `headplane/app/update-check/` still exist after every merge, so an upstream
-  merge cannot silently delete them.
-- Document the fork-specific features in the user-facing docs site
-  (`docs/`), including the update-check endpoint and the version suffix
-  convention.
-- Add the `/api/v1/update-check` endpoint to the OpenAPI specification so it is
-  discoverable alongside the rest of the v1 API.
+- **[Implemented]** — shipped and verified in the codebase.
+- **[Partially implemented]** — shipped with known gaps or pending follow-ups.
+- **[Planned]** — tracked in this roadmap or the Headplane roadmap, not yet
+  implemented.
+- **[Proposed]** — recommended by this analysis; not an existing requirement.
+  Proposed items are additive and non-destructive, and require explicit
+  approval before implementation.
+
+### Current state
+
+- Phases 1-7 are complete. Latest fork releases: Headscale
+  `v0.34.0-arsydoni4326-alt`, Headplane `v0.8.3-arsydoni4326-alt`.
+- Phases 8+ below are **proposed** and must not be implemented without
+  explicit approval.
+
+## Phase 1 — Foundation and Documentation (Completed)
+
+Released in `v0.29.9-arsydoni4326-alt`. See [CHANGELOG](./CHANGELOG.md).
+
+- [x] Create root-level `SPECIFICATION.md` and `ARCHITECTURE.md` describing the
+      fork as a whole (backend + frontend), including the fork-specific features
+      and the feature-preservation rule above.
+- [x] Add a CI check that verifies `hscontrol/updatecheck/` and
+      `headplane/app/update-check/` still exist after every merge, so an
+      upstream merge cannot silently delete them.
+- [x] Document the fork-specific features in the user-facing docs site
+      (`docs/`), including the update-check endpoint and the version suffix
+      convention.
+- [x] Add the `/api/v1/update-check` endpoint to the OpenAPI specification so it
+      is discoverable alongside the rest of the v1 API.
 
 ## Phase 2 — Update Checker Hardening (Completed)
 
@@ -111,6 +130,208 @@ See [CHANGELOG](./CHANGELOG.md) for the list of changes in this phase.
 ## Phase 6 — Community and Ecosystem (Completed)
 
 See [CHANGELOG](./CHANGELOG.md) for the list of changes in this phase.
+
+## Phase 7 — Testing and Technical Hardening [Implemented]
+
+**Objective:** Close the remaining testing, documentation, and dead-code gaps
+that make future work riskier and the codebase harder to maintain.
+
+**Problems addressed:**
+
+- Headplane has no UI component tests — only service-level unit tests,
+  integration tests, and e2e/a11y tests (`headplane/tests/unit/` covers
+  services, config, and utilities; the shared component library in
+  `headplane/app/components/` is untested). This was noted as a known
+  limitation in Phase 3.
+- `GET /api/v1/derp` is missing from the OpenAPI specification
+  (`openapi/v1/headscale.yaml` documents `/api/v1/update-check` but not the
+  DERP endpoint), so the fork's own API surface is incompletely documented.
+- Documentation inconsistency: `headplane/docs/configuration/index.md` still
+  says environment overrides require `HEADPLANE_LOAD_ENV_OVERRIDES=true`,
+  while `headplane/docs/SPECIFICATION.md` (NFR-2) and
+  `headplane/docs/ARCHITECTURE.md` state the variable is deprecated and env
+  overrides are always loaded.
+- The legacy `useUpdateCheck.ts` hook is reported as unwired in `session.md`
+  but is still referenced by `headplane/app/root.tsx`,
+  `headplane/app/layout/header.tsx`, and `headplane/app/update-check/index.ts`;
+  it needs verification and either wiring or removal.
+- The upstream `DisableUpdateCheck` config option
+  (`hscontrol/types/config.go`) is not wired to the fork's update-check
+  endpoint; the fork endpoint always responds.
+- The UI guide (`docs/usage/ui-guide.md`) still contains screenshot
+  placeholders.
+
+**Features/improvements:**
+
+- [x] Add a UI component testing framework (Vitest + React Testing Library) to
+      Headplane and cover the shared component library (button, chip,
+      status-circle, table-list, token-list, tabs, switch). Wire into CI.
+- [x] Add the `/api/v1/derp` handler to the OpenAPI spec (code-first Huma, so
+      this is a handler annotation change plus regenerated spec). Add a test
+      that asserts the endpoint and its schema appear in the emitted spec.
+- [x] Fix the `HEADPLANE_LOAD_ENV_OVERRIDES` documentation inconsistency.
+- [x] Verify and remove the legacy `useUpdateCheck.ts` hook (dead code; only
+      `useUpdateCheckContext` from `UpdateCheckProvider` is used).
+- [x] Wire `DisableUpdateCheck` into the fork's update-check endpoint: when
+      `disable_check_updates` is true, the endpoint skips the remote comparison
+      and returns version info only.
+- [x] Convert the UI guide screenshot placeholders into a tracked maintenance
+      task.
+
+**Technical work:** Headplane test tooling + component tests; backend OpenAPI
+annotation; docs corrections; dead-code cleanup.
+
+**UI/UX work:** None beyond test coverage of existing components.
+
+**Dependencies:** None.
+
+**Expected outcome:** Higher confidence in UI changes, complete API
+documentation, consistent docs, and a cleaner codebase.
+
+**Priority:** High (foundational — everything below builds on it).
+
+## Phase 8 — UI/UX and Accessibility Refinement [Proposed]
+
+**Objective:** Polish the user experience and make accessibility a
+first-class, verifiable property.
+
+**Problems addressed:**
+
+- Empty, loading, and error states are not standardized across all routes.
+- No published accessibility conformance statement; axe-core runs in CI but
+  keyboard navigation, focus management, and screen-reader flows are not
+  systematically verified.
+- No contextual help or onboarding for new users.
+- Confirmation flows for destructive actions are not uniform across pages.
+
+**Features/improvements:**
+
+- Audit and standardize empty/loading/error states across all routes
+  (`machines`, `users`, `acls`, `dns`, `settings`, `audit`, `derp`,
+  `topology`, `ssh`).
+- Extend the a11y suite beyond axe-core: keyboard navigation, focus
+  management, color contrast, and screen-reader flows; publish a conformance
+  statement.
+- Add contextual help (tooltips, inline docs) and a first-run onboarding flow.
+- Standardize confirmation dialogs for destructive actions.
+- Keep the UI guide screenshots (from Phase 7) current.
+
+**Technical work:** Shared state/empty-state components; a11y test expansion;
+help/onboarding content.
+
+**UI/UX work:** This phase is primarily UI/UX.
+
+**Dependencies:** Phase 7 (component tests make UI changes safer).
+
+**Expected outcome:** A more professional, accessible, and user-friendly UI.
+
+**Priority:** High.
+
+## Phase 9 — Supporting Features and Observability [Proposed]
+
+**Objective:** Add supporting functionality and operational visibility.
+
+**Problems addressed:**
+
+- No in-app notifications (machine expiry, pending approvals, updates).
+- No usage analytics or reporting.
+- The audit log only records Headplane UI actions (Headscale has no audit
+  API) and cannot be exported.
+- Observability is basic: structured logs and a few Prometheus metrics, with
+  no request tracing or log correlation between Headplane and Headscale.
+
+**Features/improvements:**
+
+- In-app notifications for key events (machine expiry, pending approvals,
+  update available).
+- Admin-only, opt-in usage analytics and reporting.
+- Audit log export (CSV/JSON) and a documented retention policy.
+- Observability: correlate Headplane and Headscale logs, add request tracing,
+  and expand Prometheus metrics.
+- Search/filtering enhancements (fuzzy search, saved filters) on the machines
+  and audit pages.
+
+**Technical work:** Notification service; analytics/reporting module; audit
+export; observability plumbing.
+
+**UI/UX work:** Notification center, report views, filter UI.
+
+**Dependencies:** Phase 7, 8.
+
+**Expected outcome:** Better admin insight and operational visibility.
+
+**Priority:** Medium.
+
+## Phase 10 — Core Feature Expansion [Proposed]
+
+**Objective:** Close feature gaps and expand product capabilities.
+
+**Problems addressed:**
+
+- OIDC groups cannot be used in ACLs (documented limitation in
+  `docs/about/features.md`).
+- No user self-service; all user management is admin-driven.
+- Machine management parity gaps (route management, key rotation, device
+  posture) — already planned in the Headplane roadmap.
+- DNS management improvements (`extra_records_path` provisioning) — already
+  planned in the Headplane roadmap.
+- Upstream Tailscale features not implemented: Funnel, Serve, network flow
+  logs.
+
+**Features/improvements:**
+
+- OIDC group support in ACLs (backend + frontend) [Proposed].
+- User self-service: registration, password reset, profile management
+  [Proposed].
+- Machine management parity (route management, key rotation, device posture)
+  [Planned — Headplane roadmap].
+- DNS management improvements (`extra_records_path`) [Planned — Headplane
+  roadmap].
+- Evaluate Funnel / Serve / network flow logs; implement only if stable
+  upstream and justified by demand [Proposed].
+
+**Technical work:** Backend policy/API changes for OIDC groups; self-service
+flows; parity features.
+
+**UI/UX work:** Self-service pages, parity UI, DNS improvements.
+
+**Dependencies:** Phase 7-9.
+
+**Expected outcome:** Parity with more Tailscale features and improved user
+management.
+
+**Priority:** Medium.
+
+## Phase 11 — Advanced Features and Integrations [Proposed / Future]
+
+**Objective:** Prepare for future extensibility and large-scale use. These
+items are deliberately deferred and should not be implemented until the
+current tasks require them.
+
+**Problems addressed:**
+
+- No plugin/extension system for third-party UI components.
+- No multi-Headscale-instance management from a single dashboard.
+- Limited integrations with monitoring/alerting tooling.
+
+**Features/improvements:**
+
+- Plugin/extension system for Headplane [Proposed — deferred].
+- Multi-Headscale-instance dashboard [Proposed — deferred].
+- Monitoring/alerting integrations (Prometheus/Grafana webhooks) [Proposed].
+- Terraform provider / Kubernetes operator support — the v2 API OAuth
+  client-credentials flow already enables this; document and validate
+  [Proposed].
+
+**Technical work:** Depends on the chosen item.
+
+**UI/UX work:** Depends on the chosen item.
+
+**Dependencies:** Phase 7-10.
+
+**Expected outcome:** Future-proofing and extensibility.
+
+**Priority:** Low / Deferred.
 
 ## Tracking
 

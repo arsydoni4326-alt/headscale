@@ -212,9 +212,14 @@ func releaseAPIURL() string {
 // compares it with the running binary's embedded version info. Results are
 // cached for cacheTTL to stay within GitHub's unauthenticated rate limits.
 //
+// When disabled is true (the upstream disable_check_updates config option),
+// the remote check is skipped entirely and only the running binary's version
+// info is returned, regardless of check. The v1 API operation wires this from
+// the server config so operators can opt out of the remote comparison.
+//
 // It is the single source of truth for the response shape, shared by the
 // http.HandlerFunc and the v1 API operation.
-func BuildResponse(check bool) UpdateCheckResponse {
+func BuildResponse(check bool, disabled bool) UpdateCheckResponse {
 	versionInfo := types.GetVersionInfo()
 
 	resp := UpdateCheckResponse{
@@ -228,8 +233,8 @@ func BuildResponse(check bool) UpdateCheckResponse {
 
 	updateCheckRequests.WithLabelValues(strconv.FormatBool(check)).Inc()
 
-	// Only perform the remote check when requested.
-	if !check {
+	// Only perform the remote check when requested and not disabled.
+	if !check || disabled {
 		return resp
 	}
 
@@ -323,12 +328,15 @@ func tryCommitComparison(resp UpdateCheckResponse, localCommit string) UpdateChe
 //  1. Always returns the running binary's version info.
 //  2. When ?check=true is set, fetches the remote latest release/commit
 //     and compares it with the embedded version.
+//
+// Handler has no config access, so it always enables the remote check; the v1
+// API operation passes the server's DisableUpdateCheck instead.
 func Handler() http.HandlerFunc {
 	return func(writer http.ResponseWriter, req *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
 
 		check := strings.EqualFold(req.URL.Query().Get("check"), "true")
-		resp := BuildResponse(check)
+		resp := BuildResponse(check, false)
 
 		writer.WriteHeader(http.StatusOK)
 

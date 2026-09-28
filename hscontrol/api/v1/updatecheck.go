@@ -27,8 +27,9 @@ func init() {
 // registerUpdateCheck exposes the fork's update-check endpoint as a v1 API
 // operation so it is discoverable in the OpenAPI document. It is intentionally
 // unauthenticated (no Security requirement), matching the endpoint's no-auth
-// behavior.
-func registerUpdateCheck(api huma.API, _ Backend) {
+// behavior. The server's disable_check_updates config option is wired through
+// so operators can opt out of the remote comparison.
+func registerUpdateCheck(api huma.API, b Backend) {
 	huma.Register(api, huma.Operation{
 		OperationID: "update-check",
 		Method:      http.MethodGet,
@@ -38,7 +39,7 @@ func registerUpdateCheck(api huma.API, _ Backend) {
 		Tags:        []string{"Update"},
 	}, func(ctx context.Context, input *updateCheckInput) (*updateCheckOutput, error) {
 		return &updateCheckOutput{
-			Body: updatecheck.BuildResponse(strings.EqualFold(input.Check, "true")),
+			Body: updatecheck.BuildResponse(strings.EqualFold(input.Check, "true"), b.Cfg.DisableUpdateCheck),
 		}, nil
 	})
 }

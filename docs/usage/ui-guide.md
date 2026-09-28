@@ -9,9 +9,7 @@ This guide provides visual references and flow diagrams for the Headscale
 user interface. It is intended for contributors and maintainers who need
 to understand, update, or test the UI.
 
-> **Note:** This document contains placeholders for screenshots and
-> diagrams. When the UI changes, contributors should update the
-> corresponding images to keep this guide accurate.
+> **Note:** Screenshots in this guide are tracked as a [maintenance task](https://github.com/arsydoni4326-alt/headscale/issues). When the UI changes, contributors should update the corresponding images to keep this guide accurate. See [How to take and update screenshots](#how-to-take-and-update-screenshots) below.
 
 ---
 

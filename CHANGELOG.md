@@ -49,6 +49,26 @@ keys remain all-access.
 
 # Next
 
+### Changes
+
+- **Phase 7: Testing and Technical Hardening**:
+  - Backend: Wired `DisableUpdateCheck` into the fork's update-check endpoint.
+    When `disable_check_updates: true` is set, the endpoint skips the remote
+    comparison and returns version info only.
+  - Backend: Added `TestAPIV1Derp` and `TestAPIV1DerpInSpec` to verify the
+    `/api/v1/derp` endpoint response shape and its presence in the OpenAPI spec.
+  - Backend: Added `TestBuildResponse_Disabled` to verify the disabled behavior.
+  - Headplane: Added a UI component testing framework (Vitest + jsdom +
+    React Testing Library) with 38 component tests covering button, chip,
+    status-circle, table-list, token-list, tabs, and switch. Wire into CI.
+  - Headplane: Fixed `HEADPLANE_LOAD_ENV_OVERRIDES` documentation
+    inconsistency in `docs/configuration/index.md`.
+  - Headplane: Removed legacy `useUpdateCheck.ts` and `git-api.ts` (dead code;
+    only `useUpdateCheckContext` from `UpdateCheckProvider` is used).
+  - Docs: Updated `docs/usage/ui-guide.md` to track screenshot placeholders as
+    a maintenance task.
+  - Docs: Updated `ROADMAP.md` to mark Phase 7 as Implemented.
+
 ## 0.34.0-arsydoni4326-alt (2026-09-29)
 
 Fork release of the `arsydoni4326-alt` fork. Version numbers in this fork
