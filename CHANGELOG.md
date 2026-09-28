@@ -49,6 +49,12 @@ keys remain all-access.
 
 # Next
 
+## Changes
+
+- Added a read-only `GET /api/v1/derp` endpoint that returns the current DERP
+  relay map configuration (regions, nodes, DERP/STUN ports, IPv4/IPv6). This
+  powers the DERP status page in Headplane.
+
 ## 0.31.0-arsydoni4326-alt (2026-09-27)
 
 Fork release of the `arsydoni4326-alt` fork. Version numbers in this fork

@@ -81,6 +81,20 @@ the `HEADSCALE_UPDATE_CHECK_REPO` environment variable.
 
 See [The fork](../about/fork.md) for details about this fork-specific feature.
 
+### DERP map
+
+The fork exposes a read-only, authenticated endpoint that returns the current
+DERP relay map configuration:
+
+```console
+curl -H "Authorization: Bearer <API_KEY>" \
+  https://headscale.example.com/api/v1/derp
+```
+
+The response reports whether DERP is configured, the total region count, and
+each region's ID, name, code, and relay nodes (name, hostname, DERP/STUN
+ports, IPv4/IPv6). This powers the DERP status page in Headplane.
+
 ## Remote control
 
 The `headscale` binary can control a Headscale instance from a remote machine over the HTTP API.
