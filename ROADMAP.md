@@ -190,7 +190,7 @@ documentation, consistent docs, and a cleaner codebase.
 
 **Priority:** High (foundational — everything below builds on it).
 
-## Phase 8 — UI/UX and Accessibility Refinement [In Progress]
+## Phase 8 — UI/UX and Accessibility Refinement [Partially implemented]
 
 **Objective:** Polish the user experience and make accessibility a
 first-class, verifiable property.
@@ -209,9 +209,13 @@ first-class, verifiable property.
 - [x] Document accessibility features and guidance in the UI guide (keyboard
       navigation, screen reader support, visual accessibility, forms, testing,
       known limitations, reporting process).
-- [ ] Audit and standardize empty/loading/error states across all routes
-  (`machines`, `users`, `acls`, `dns`, `settings`, `audit`, `derp`,
-  `topology`, `ssh`).
+- [x] Create standardized UI state components (`EmptyState`, `LoadingSpinner`)
+      with full accessibility support and comprehensive component tests.
+- [x] Refactor machines and users overview pages to use standardized components.
+- [x] Extend e2e accessibility test coverage (empty/loading states, icon-only
+      buttons).
+- [ ] Audit and standardize empty/loading/error states in remaining routes
+  (`acls`, `dns`, `settings`, `audit`, `derp`, `topology`, `ssh`).
 - [ ] Extend the a11y suite beyond axe-core: keyboard navigation, focus
   management, color contrast, and screen-reader flows; publish a conformance
   statement.
@@ -225,7 +229,6 @@ help/onboarding content.
 **UI/UX work:** This phase is primarily UI/UX.
 
 **Dependencies:** Phase 7 (component tests make UI changes safer).
-
 
 **Expected outcome:** A more professional, accessible, and user-friendly UI.
 
