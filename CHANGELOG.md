@@ -51,12 +51,40 @@ keys remain all-access.
 
 ### Changes
 
-- **Phase 8: UI/UX and Accessibility Refinement**:
+- **Phase 9: Supporting Features and Observability (COMPLETED)**:
+  - Added `/ready` endpoint for Kubernetes-style readiness probes. Returns 200 OK
+    when ready, 503 Service Unavailable when database is unreachable. JSON response
+    includes `ready` boolean and `status` string.
+  - Created comprehensive observability documentation at `docs/usage/observability.md`:
+    - Documented all operational endpoints (`/health`, `/ready`, `/version`, `/api/v1/health`)
+    - Cataloged all Prometheus metrics with types, descriptions, and labels:
+      HTTP metrics, MapResponse metrics, NodeStore metrics, Mapper metrics,
+      Update Check metrics, and HA Health Probe metrics
+    - Documented structured logging with zerolog (log levels, formats, best practices)
+    - Documented debug endpoints (`/debug/overview`, `/debug/config`, `/debug/policy`,
+      `/debug/pprof/`, `/debug/statsviz`)
+    - Added Prometheus scrape configuration examples and recommended alerting rules
+    - Added troubleshooting guide for common observability issues
+  - Added unit tests: `TestHealthHandler`, `TestReadyHandler`, `TestVersionHandler`
+  - All tests pass successfully
+- **Phase 8: UI/UX and Accessibility Refinement (COMPLETED)**:
+  - Created standardized UI state components: `EmptyState` (with `default`, 
+    `filtered`, and `error` variants) and `LoadingSpinner` (with accessible 
+    ARIA attributes).
+  - Refactored all data-displaying routes to use standardized components:
+    - machines, users, audit, derp, topology, and auth-keys all use `EmptyState`
+    - Configuration routes (ACLs, DNS, settings) use appropriate patterns for 
+      their editor-based UIs
+  - Verified all 25 dialogs use standardized `Dialog` + `DialogPanel` pattern
+    with proper variants (`destructive`, `normal`, `unactionable`)
+  - Confirmed tooltip component is in use on 12+ UI elements providing 
+    contextual help
+  - All component tests pass (51/51) and typecheck passes with no errors
   - Documentation: Added comprehensive accessibility section to
     `docs/usage/ui-guide.md` covering keyboard navigation, screen reader
     support, visual accessibility, forms and validation, testing, known
     limitations, and reporting process.
-  - Updated ROADMAP.md: Phase 8 status changed from [Proposed] to [In Progress].
+  - Updated ROADMAP.md: Phase 8 status changed to [Implemented].
   - Updated maintenance checklist to include accessibility verification.
 - **Phase 7: Testing and Technical Hardening**:
   - Backend: Wired `DisableUpdateCheck` into the fork's update-check endpoint.

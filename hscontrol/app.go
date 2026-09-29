@@ -472,6 +472,7 @@ func (h *Headscale) createRouter(apiV1Mux, apiV2Mux http.Handler) *chi.Mux {
 
 	r.Get("/robots.txt", h.RobotsHandler)
 	r.Get("/health", h.HealthHandler)
+	r.Get("/ready", h.ReadyHandler)
 	r.Get("/version", h.VersionHandler)
 	r.Get("/key", h.KeyHandler)
 	r.Get("/register/{auth_id}", h.authProvider.RegisterHandler)

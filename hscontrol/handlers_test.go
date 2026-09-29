@@ -255,3 +255,136 @@ func TestHttpUserError(t *testing.T) {
 		})
 	}
 }
+
+func TestHealthHandler(t *testing.T) {
+	tmpDir := t.TempDir()
+	prefixV4 := netip.MustParsePrefix("100.64.0.0/10")
+	prefixV6 := netip.MustParsePrefix("fd7a:115c:a1e0::/48")
+
+	cfg := &types.Config{
+		ServerURL:           "http://localhost:0",
+		NoisePrivateKeyPath: tmpDir + "/noise_private.key",
+		PrefixV4:            &prefixV4,
+		PrefixV6:            &prefixV6,
+		IPAllocation:        types.IPAllocationStrategySequential,
+		Database: types.DatabaseConfig{
+			Type: "sqlite3",
+			Sqlite: types.SqliteConfig{
+				Path: tmpDir + "/headscale_test.db",
+			},
+		},
+		Policy: types.PolicyConfig{
+			Mode: types.PolicyModeDB,
+		},
+	}
+
+	h, err := NewHeadscale(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = h.state.Close()
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	rr := httptest.NewRecorder()
+
+	h.HealthHandler(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, "application/health+json; charset=utf-8", rr.Header().Get("Content-Type"))
+
+	var resp struct {
+		Status string `json:"status"`
+	}
+	err = json.Unmarshal(rr.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	assert.Equal(t, "pass", resp.Status)
+}
+
+func TestReadyHandler(t *testing.T) {
+	tmpDir := t.TempDir()
+	prefixV4 := netip.MustParsePrefix("100.64.0.0/10")
+	prefixV6 := netip.MustParsePrefix("fd7a:115c:a1e0::/48")
+
+	cfg := &types.Config{
+		ServerURL:           "http://localhost:0",
+		NoisePrivateKeyPath: tmpDir + "/noise_private.key",
+		PrefixV4:            &prefixV4,
+		PrefixV6:            &prefixV6,
+		IPAllocation:        types.IPAllocationStrategySequential,
+		Database: types.DatabaseConfig{
+			Type: "sqlite3",
+			Sqlite: types.SqliteConfig{
+				Path: tmpDir + "/headscale_test.db",
+			},
+		},
+		Policy: types.PolicyConfig{
+			Mode: types.PolicyModeDB,
+		},
+	}
+
+	h, err := NewHeadscale(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = h.state.Close()
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	rr := httptest.NewRecorder()
+
+	h.ReadyHandler(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+
+	var resp struct {
+		Ready  bool   `json:"ready"`
+		Status string `json:"status"`
+	}
+	err = json.Unmarshal(rr.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	assert.True(t, resp.Ready)
+	assert.Equal(t, "ready", resp.Status)
+}
+
+func TestVersionHandler(t *testing.T) {
+	tmpDir := t.TempDir()
+	prefixV4 := netip.MustParsePrefix("100.64.0.0/10")
+	prefixV6 := netip.MustParsePrefix("fd7a:115c:a1e0::/48")
+
+	cfg := &types.Config{
+		ServerURL:           "http://localhost:0",
+		NoisePrivateKeyPath: tmpDir + "/noise_private.key",
+		PrefixV4:            &prefixV4,
+		PrefixV6:            &prefixV6,
+		IPAllocation:        types.IPAllocationStrategySequential,
+		Database: types.DatabaseConfig{
+			Type: "sqlite3",
+			Sqlite: types.SqliteConfig{
+				Path: tmpDir + "/headscale_test.db",
+			},
+		},
+		Policy: types.PolicyConfig{
+			Mode: types.PolicyModeDB,
+		},
+	}
+
+	h, err := NewHeadscale(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = h.state.Close()
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/version", nil)
+	rr := httptest.NewRecorder()
+
+	h.VersionHandler(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+
+	var resp types.VersionInfo
+	err = json.Unmarshal(rr.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	// Version info should be present (may be "dev" in test environment)
+	assert.NotEmpty(t, resp.Version)
+}
