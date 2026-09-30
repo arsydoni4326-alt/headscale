@@ -3,9 +3,12 @@ package db
 import (
 	"context"
 	_ "embed"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/netip"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"time"
 
@@ -510,13 +513,10 @@ AND auth_key_id NOT IN (
 			// Any new migrations should be added after the comment below and follow
 			// the rules it sets out.
 
-			// From this point, the following rules must be followed:
-=======
 			// Migrations start from v0.29.0; older databases are rejected by
 			// checkMinimumMigration and must upgrade to the latest 0.29.x first.
 			//
 			// Rules:
->>>>>>> upstream/main
 			// - NEVER use gorm.AutoMigrate, write the exact migration steps needed
 			// - AutoMigrate depends on the struct staying exactly the same, which it won't over time.
 			// - Never write migrations that requires foreign keys to be disabled.
@@ -722,42 +722,42 @@ WHERE tags IS NOT NULL AND tags != '[]' AND tags != '' AND tags != 'null'
 				},
 				Rollback: func(db *gorm.DB) error { return nil },
 			},
-			{
-				// Add webhooks table for monitoring/alerting integrations.
-				// Webhooks can be configured to receive HTTP POST notifications
-				// for events like node up/down, health check failures, and alerts.
-				ID: "202609301000-create-webhooks-table",
-				Migrate: func(tx *gorm.DB) error {
-					return tx.AutoMigrate(&types.Webhook{})
-				},
-				Rollback: func(tx *gorm.DB) error {
-					return tx.Migrator().DropTable(&types.Webhook{})
-				},
-=======
-			// 0.30: unified credentials table (InitSchema keeps ensureCredentialsTable).
-			// TODO(kradalby): remove in 0.31 with the credentials migration.
-			{
-				// Create the unified credentials table; the next migration
-				// backfills it. Explicit DDL for both dialects (no AutoMigrate).
-				ID:       "202609231200-create-credentials",
-				Migrate:  ensureCredentialsTable,
-				Rollback: func(db *gorm.DB) error { return nil },
-			},
-			{
-				// Move every credential into the unified table and drop the
-				// per-kind tables (see migrateToCredentials).
-				ID: "202609231300-migrate-to-credentials",
-				Migrate: func(tx *gorm.DB) error {
-					// Already migrated (e.g. fresh DB via InitSchema): nothing to do.
-					if !tx.Migrator().HasTable("pre_auth_keys") &&
-						!tx.Migrator().HasTable("api_keys") {
-						return nil
-					}
+		// 0.30: unified credentials table (InitSchema keeps ensureCredentialsTable).
+		// TODO(kradalby): remove in 0.31 with the credentials migration.
+		{
+			// Create the unified credentials table; the next migration
+			// backfills it. Explicit DDL for both dialects (no AutoMigrate).
+			ID:       "202609231200-create-credentials",
+			Migrate:  ensureCredentialsTable,
+			Rollback: func(db *gorm.DB) error { return nil },
+		},
+		{
+			// Move every credential into the unified table and drop the
+			// per-kind tables (see migrateToCredentials).
+			ID: "202609231300-migrate-to-credentials",
+			Migrate: func(tx *gorm.DB) error {
+				// Already migrated (e.g. fresh DB via InitSchema): nothing to do.
+				if !tx.Migrator().HasTable("pre_auth_keys") &&
+					!tx.Migrator().HasTable("api_keys") {
+					return nil
+				}
 
-					return tx.Transaction(migrateToCredentials)
-				},
-				Rollback: func(db *gorm.DB) error { return nil },
+				return tx.Transaction(migrateToCredentials)
 			},
+			Rollback: func(db *gorm.DB) error { return nil },
+		},
+		{
+			// Add webhooks table for monitoring/alerting integrations.
+			// Webhooks can be configured to receive HTTP POST notifications
+			// for events like node up/down, health check failures, and alerts.
+			ID: "202609301000-create-webhooks-table",
+			Migrate: func(tx *gorm.DB) error {
+				return tx.AutoMigrate(&types.Webhook{})
+			},
+			Rollback: func(tx *gorm.DB) error {
+				return tx.Migrator().DropTable(&types.Webhook{})
+			},
+		},
 		},
 	)
 
