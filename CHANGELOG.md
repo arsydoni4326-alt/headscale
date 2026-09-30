@@ -43,7 +43,66 @@ keys remain all-access.
 
 [#3334](https://github.com/juanfont/headscale/pull/3334)
 
+An OAuth client secret also joins nodes: `tailscale up`, the container image,
+`tsnet` and the Tailscale GitHub Action take it as an auth key
+(`tskey-client-…?baseURL=<headscale>`) and mint a tagged key per node. Pre-auth
+key registrations now accept `--advertise-tags` that are a subset of the key's
+tags; any other tag is rejected, for new and re-registering nodes alike. See
+[the API docs](https://headscale.net/stable/ref/api/).
+
+[#3351](https://github.com/juanfont/headscale/pull/3351)
+
+### Credentials stored in one table, hashed with SHA-256
+
+API keys, pre-auth keys, OAuth clients and OAuth access tokens now live in a
+single `credentials` table and are verified by one shared code path. Their
+secrets are 256 bits of server-generated randomness, never user-chosen, so they
+are stored as a SHA-256 digest: recovering one means searching the whole secret
+space, and password stretching would only add latency to every request.
+
+Keys created by older releases keep working on 0.30. Support for them is
+removed on this schedule:
+
+- **0.31** drops the upgrade from the 0.29 tables: upgrade to 0.30 first, as
+  the one-minor-version-at-a-time rule already requires.
+- **0.32** drops bcrypt verification. A bcrypt-hashed key is rehashed to SHA-256
+  the first time it authenticates, so use every API key and pre-auth key you
+  still need at least once on 0.30 or 0.31. Keys not used by then stop working
+  and must be reissued.
+- **0.32** drops the legacy key formats: API keys of the form `prefix.secret`
+  (shown with a 7-character prefix in `headscale apikeys list`) and pre-auth
+  keys from before 0.28.0 (shown as `hskey-auth-legacy-…` in
+  `headscale preauthkeys list`). Using them does not help; reissue them before
+  upgrading to 0.32.
+
+[#3352](https://github.com/juanfont/headscale/pull/3352)
+
+### NixOS test kit
+
+Projects built on Tailscale, such as tsnet services, tailscaled integrations or
+Tailscale client implementations, can now test against a real control server
+in their NixOS VM tests. Import `nixosModules.testkit` on a node named
+`headscale`. Clients join `http://headscale` with no certificates or other
+setup, and `hs-authkey USER` on that node mints their auth keys.
+`nixosModules.testkit-peer` adds a tailscaled peer that joins with `hs-join KEY`:
+
+```nix
+nodes.headscale.imports = [ inputs.headscale.nixosModules.testkit ];
+nodes.peer.imports = [ inputs.headscale.nixosModules.testkit-peer ];
+# testScript: peer.succeed(f"hs-join {headscale.succeed('hs-authkey alice').strip()}")
+```
+
+See `nix/README.md` for the full contract, recipes for tsnet and non-Go
+clients, and how to run the same setup without Nix.
+
 ### BREAKING
+
+#### Database
+
+- Only upgrades from 0.29.x are supported; migrations for older releases are removed and headscale refuses to start on an older database. Upgrade to the latest 0.29.x first [#3352](https://github.com/juanfont/headscale/pull/3352)
+- The `pre_auth_keys`, `api_keys`, `oauth_clients` and `oauth_access_tokens` tables are merged into `credentials` and dropped. The migration cannot be reversed; take a backup before upgrading, as downgrading means restoring it [#3352](https://github.com/juanfont/headscale/pull/3352)
+- API key IDs are renumbered, as all credential kinds now share one ID sequence; scripts using `headscale apikeys expire|delete --id` should look IDs up again or use `--prefix` [#3352](https://github.com/juanfont/headscale/pull/3352)
+- Deleting a user now clears the owner of its API keys and OAuth clients instead of leaving a dangling reference [#3352](https://github.com/juanfont/headscale/pull/3352)
 
 #### API
 
@@ -52,17 +111,33 @@ keys remain all-access.
 - Errors that previously returned HTTP 500 — unknown users or nodes, malformed input, duplicate names — now return the correct 404, 400 or 409 [#3324](https://github.com/juanfont/headscale/pull/3324)
 - The OpenAPI document is OpenAPI 3.1 at `/api/v1/openapi.yaml` (docs at `/api/v1/docs`), replacing Swagger 2.0 at `/swagger` [#3324](https://github.com/juanfont/headscale/pull/3324)
 
+#### Configuration
+
+- `derp.paths` files must end in `.yaml`, `.yml`, `.json` or `.hujson`; the extension picks the format
+- `dns.extra_records_path` must end in `.json`, `.hujson`, `.yaml` or `.yml`; the extension picks the format
+- A `derp.paths` file that decodes to no regions now stops headscale from starting instead of being silently ignored
+
 #### CLI
 
 - `--output json` / `--output yaml` now emit the API's shape — camelCase fields, string-encoded IDs, RFC3339 timestamps — instead of the old Protobuf encoding [#3324](https://github.com/juanfont/headscale/pull/3324)
 - `headscale policy` renames the database-bypass flag from `--bypass-grpc-and-access-database-directly` to `--bypass-server-and-access-database-directly` [#3324](https://github.com/juanfont/headscale/pull/3324)
 
+#### NixOS module
+
+- `settings.ephemeral_node_inactivity_timeout` is removed; set `settings.node.ephemeral.inactivity_timeout`, which headscale reads instead
+- `settings.dns.split` is removed; headscale never read it, set `settings.dns.nameservers.split`
+
 ### Changes
 
 - Expiring or deleting a non-existent pre-auth key now returns an error instead of silently succeeding [#3324](https://github.com/juanfont/headscale/pull/3324)
 - Improve systemd service file hardening [#3341](https://github.com/juanfont/headscale/pull/3341)
-- The peer map is keyed by node ID and reused for writes that cannot change peer visibility, so a routine map request no longer rebuilds it. Adds `headscale_nodestore_snapshot_builds_total` [#3417](https://github.com/juanfont/headscale/issues/3417) [#3450](https://github.com/juanfont/headscale/pull/3450)
+- Fix `headscale users destroy`/`rename` reporting "multiple users match query" when no user matches; an ambiguous match now lists the matching users [#3476](https://github.com/juanfont/headscale/pull/3476)
+- Deleting a user that still owns nodes now lists the nodes (ID and hostname) that must be deleted first [#3475](https://github.com/juanfont/headscale/pull/3475)
 - Headscale now requires Go 1.27 to build
+- `headscale preauthkeys create --user` accepts a user name as well as an ID
+- `derp.paths` files may be Tailscale JSON or HuJSON DERP maps as well as YAML
+- `dns.extra_records_path` files may be HuJSON or YAML as well as JSON
+- A `derp.paths` region set to `null` removes that region again, as documented
 
 # Next
 - **Phase 10: Core Feature Expansion (IN PROGRESS)**:
@@ -365,6 +440,8 @@ always end with `-arsydoni4326-alt`.
 Fork release of the `arsydoni4326-alt` fork. Version numbers in this fork
 always end with `-arsydoni4326-alt`.
 
+## 0.29.4 (2026-09-23)
+
 **Minimum supported Tailscale client version: v1.80.0**
 
 ### Changes
@@ -380,7 +457,12 @@ always end with `-arsydoni4326-alt`.
 - Fix tailsql not shutting down with headscale, leaving the process hanging on graceful shutdown [#3400](https://github.com/juanfont/headscale/pull/3400)
 - Fix tvOS setup instructions: install the VPN configuration before setting the coordination server URL [#3431](https://github.com/juanfont/headscale/pull/3431)
 - Map requests that only bump LastSeen, endpoints or DERP region no longer resend the whole node to every peer, and health probes that change nothing no longer write. Adds `headscale_mapper_changes_dropped_total` and `headscale_ha_health_updates_total` [#3417](https://github.com/juanfont/headscale/issues/3417) [#3450](https://github.com/juanfont/headscale/pull/3450)
+- The peer map is keyed by node ID and reused for writes that cannot change peer visibility, so a routine map request no longer rebuilds it. Adds `headscale_nodestore_snapshot_builds_total` [#3417](https://github.com/juanfont/headscale/issues/3417) [#3450](https://github.com/juanfont/headscale/pull/3450)
+- Fix an expired node staying online forever, because expiring it updated the key deadline without ending its map session [#3472](https://github.com/juanfont/headscale/pull/3472)
 - Fix ACME renewal stopping permanently after a `badNonce` reply, because the error logging middleware drained the response body the acme client needs to detect it [#3461](https://github.com/juanfont/headscale/pull/3461)
+- Fix `#`-prefixed metadata fields being rejected outside `acls`, so policy editors can store metadata in grants, SSH rules and `nodeAttrs` [#3481](https://github.com/juanfont/headscale/pull/3481)
+- Fix exit nodes not offered by recent macOS and iOS clients, which read the `suggest-exit-node` peer attribute rather than the advertised `0.0.0.0/0` routes [#3487](https://github.com/juanfont/headscale/pull/3487)
+- Fix exit node not offered to viewers whose only matching rule is a `via` grant; peer visibility now comes from the peer map alone [#3409](https://github.com/juanfont/headscale/pull/3409)
 - Use `Dockerfile.tailscale-HEAD` for the GHCR deploy build
 
 ## 0.29.3-arsydoni4326-alt (2026-09-25)
@@ -719,6 +801,8 @@ connected" routers that maintain their control session but cannot route packets.
   - `oidc.expiry` has been removed; use `node.expiry` instead (applies to all registration methods including OIDC)
   - `ephemeral_node_inactivity_timeout` is deprecated in favour of `node.ephemeral.inactivity_timeout`
 - Add `trusted_proxies` to gate `True-Client-IP` / `X-Real-IP` / `X-Forwarded-For` (previously honoured from any client) [#3268](https://github.com/juanfont/headscale/pull/3268)
+- Reject overlapping TCP listener bindings (e.g. `listen_addr` vs ACME HTTP-01 on port 80) at config load [#3236](https://github.com/juanfont/headscale/pull/3236)
+- Improve config and bind-failure errors: every violation reported in one pass, named YAML keys, actionable operator hints [#3236](https://github.com/juanfont/headscale/pull/3236)
 
 #### Debug
 

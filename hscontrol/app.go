@@ -3,10 +3,16 @@ package hscontrol
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"os"
@@ -222,8 +228,7 @@ func NewHeadscale(cfg *types.Config) (*Headscale, error) {
 			// DNS routes vanish, taking the resolver with them for ~6 min
 			// until the next route-changing netmap. Empty slice survives
 			// Clone and carries the same "resolve locally" semantics
-			// (tailscale.com/ipn/ipnlocal/node_backend.go:869 documents the
-			// empty-resolver Routes form for Issue 2706).
+			// ([tailcfg.DNSConfig.Routes] documents the empty-resolver form).
 			app.cfg.TailcfgDNSConfig.Routes[d.WithoutTrailingDot()] = []*dnstype.Resolver{}
 		}
 	}
@@ -378,7 +383,11 @@ func (h *Headscale) scheduledTasks(ctx context.Context) {
 				}
 
 				if h.cfg.DERP.ServerEnabled && h.cfg.DERP.AutomaticallyAddEmbeddedDerpRegion {
-					region, _ := h.DERPServer.GenerateRegion()
+					region, err := h.DERPServer.GenerateRegion()
+					if err != nil {
+						return nil, fmt.Errorf("generating embedded DERP region: %w", err)
+					}
+
 					derpMap.Regions[region.RegionID] = &region
 				}
 
@@ -566,7 +575,11 @@ func (h *Headscale) Serve() error {
 	}
 
 	if h.cfg.DERP.ServerEnabled && h.cfg.DERP.AutomaticallyAddEmbeddedDerpRegion {
-		region, _ := h.DERPServer.GenerateRegion()
+		region, err := h.DERPServer.GenerateRegion()
+		if err != nil {
+			return fmt.Errorf("generating embedded DERP region: %w", err)
+		}
+
 		derpMap.Regions[region.RegionID] = &region
 	}
 
@@ -680,10 +693,12 @@ func (h *Headscale) Serve() error {
 	// Set up REMOTE listeners
 	//
 
-	tlsConfig, err := h.getTLSSettings()
+	tlsBundle, err := h.getTLSSettings(ctx)
 	if err != nil {
 		return fmt.Errorf("configuring TLS settings: %w", err)
 	}
+
+	tlsConfig := tlsBundle.Config
 
 	//
 	//
@@ -713,13 +728,66 @@ func (h *Headscale) Serve() error {
 	}
 
 	if err != nil {
-		return fmt.Errorf("binding to TCP address: %w", err)
+		return &types.ListenerBindError{
+			Listener: "main HTTP",
+			YAMLKey:  "listen_addr",
+			Addr:     h.cfg.Addr,
+			Err:      err,
+		}
 	}
 
 	errorGroup.Go(func() error { return httpServer.Serve(httpListener) })
 
 	log.Info().
 		Msgf("listening and serving HTTP on: %s", h.cfg.Addr)
+
+	var (
+		insecureTLSServer   *http.Server
+		insecureTLSListener net.Listener
+	)
+
+	if addr := derpServer.DebugInsecureTLSListenAddr(); addr != "" {
+		insecureTLSConfig, err := selfSignedTLSConfig()
+		if err != nil {
+			return fmt.Errorf("creating self-signed TLS certificate: %w", err)
+		}
+
+		insecureTLSListener, err = tls.Listen("tcp", addr, insecureTLSConfig)
+		if err != nil {
+			return &types.ListenerBindError{
+				Listener: "insecure TLS",
+				YAMLKey:  "HEADSCALE_DEBUG_INSECURE_TLS_LISTEN_ADDR",
+				Addr:     addr,
+				Err:      err,
+			}
+		}
+
+		insecureTLSServer = &http.Server{
+			Handler:      router,
+			ReadTimeout:  types.HTTPTimeout,
+			WriteTimeout: types.HTTPTimeout,
+		}
+
+		errorGroup.Go(func() error { return insecureTLSServer.Serve(insecureTLSListener) })
+
+		log.Warn().
+			Str("addr", addr).
+			Msg("serving TLS with a self-signed certificate (HEADSCALE_DEBUG_INSECURE_TLS_LISTEN_ADDR); for tests only")
+	}
+
+	if tlsBundle.ACMEServer != nil {
+		log.Info().Msgf(
+			"listening and serving ACME HTTP-01 challenge on: %s",
+			tlsBundle.ACMEListener.Addr())
+		errorGroup.Go(func() error {
+			err := tlsBundle.ACMEServer.Serve(tlsBundle.ACMEListener)
+			if err != nil && !errors.Is(err, http.ErrServerClosed) {
+				return fmt.Errorf("ACME HTTP-01 challenge listener: %w", err)
+			}
+
+			return nil
+		})
+	}
 
 	// Only start debug/metrics server if address is configured
 	var debugHTTPServer *http.Server
@@ -729,7 +797,12 @@ func (h *Headscale) Serve() error {
 	if h.cfg.MetricsAddr != "" {
 		debugHTTPListener, err = (&net.ListenConfig{}).Listen(ctx, "tcp", h.cfg.MetricsAddr)
 		if err != nil {
-			return fmt.Errorf("binding to TCP address: %w", err)
+			return &types.ListenerBindError{
+				Listener: "metrics",
+				YAMLKey:  "metrics_listen_addr",
+				Addr:     h.cfg.MetricsAddr,
+				Err:      err,
+			}
 		}
 
 		debugHTTPServer = h.debugHTTPServer()
@@ -830,6 +903,26 @@ func (h *Headscale) Serve() error {
 					log.Error().Err(err).Msg("failed to shutdown http")
 				}
 
+				if insecureTLSServer != nil {
+					info("shutting down insecure TLS server")
+
+					err := insecureTLSServer.Shutdown(shutdownCtx)
+					if err != nil {
+						log.Error().Err(err).Msg("failed to shutdown insecure TLS server")
+					}
+				}
+
+				if tlsBundle.ACMEServer != nil {
+					info("shutting down ACME HTTP-01 challenge server")
+
+					err := tlsBundle.ACMEServer.Shutdown(shutdownCtx)
+					if err != nil {
+						log.Error().Err(err).Msg("failed to shutdown ACME HTTP-01 server")
+					}
+
+					tlsBundle.ACMEListener.Close()
+				}
+
 				info("closing batcher")
 				h.mapBatcher.Close()
 
@@ -855,6 +948,10 @@ func (h *Headscale) Serve() error {
 				}
 
 				httpListener.Close()
+
+				if insecureTLSListener != nil {
+					insecureTLSListener.Close()
+				}
 
 				// Stop listening (and unlink the socket if unix type):
 				info("closing socket listener")
@@ -885,7 +982,17 @@ func (h *Headscale) Serve() error {
 	return errorGroup.Wait()
 }
 
-func (h *Headscale) getTLSSettings() (*tls.Config, error) {
+// tlsBundle carries the TLS settings produced by getTLSSettings. When
+// HTTP-01 ACME is configured, ACMEServer and ACMEListener are populated
+// so the caller can register the challenge listener with the errgroup
+// and wire it into the shutdown path. Otherwise both are nil.
+type tlsBundle struct {
+	Config       *tls.Config
+	ACMEServer   *http.Server
+	ACMEListener net.Listener
+}
+
+func (h *Headscale) getTLSSettings(ctx context.Context) (*tlsBundle, error) {
 	tlsEnabled := h.cfg.TLS.LetsEncrypt.Hostname != "" || h.cfg.TLS.CertPath != ""
 	if tlsEnabled && !strings.HasPrefix(h.cfg.ServerURL, "https://") {
 		log.Warn().Msg("listening with TLS but ServerURL does not start with https://")
@@ -914,7 +1021,7 @@ func (h *Headscale) getTLSSettings() (*tls.Config, error) {
 			// Configuration via autocert with TLS-ALPN-01 (https://tools.ietf.org/html/rfc8737)
 			// The RFC requires that the validation is done on port 443; in other words, headscale
 			// must be reachable on port 443.
-			return certManager.TLSConfig(), nil
+			return &tlsBundle{Config: certManager.TLSConfig()}, nil
 
 		case types.HTTP01ChallengeType:
 			// Configuration via autocert with HTTP-01. This requires listening on
@@ -926,15 +1033,21 @@ func (h *Headscale) getTLSSettings() (*tls.Config, error) {
 				ReadTimeout: types.HTTPTimeout,
 			}
 
-			go func() {
-				err := server.ListenAndServe()
-				log.Fatal().
-					Caller().
-					Err(err).
-					Msg("failed to set up a HTTP server")
-			}()
+			listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", server.Addr)
+			if err != nil {
+				return nil, &types.ListenerBindError{
+					Listener: "ACME HTTP-01 challenge",
+					YAMLKey:  "tls_letsencrypt_listen",
+					Addr:     server.Addr,
+					Err:      err,
+				}
+			}
 
-			return certManager.TLSConfig(), nil
+			return &tlsBundle{
+				Config:       certManager.TLSConfig(),
+				ACMEServer:   server,
+				ACMEListener: listener,
+			}, nil
 
 		default:
 			return nil, errUnsupportedLetsEncryptChallengeType
@@ -942,23 +1055,52 @@ func (h *Headscale) getTLSSettings() (*tls.Config, error) {
 	}
 
 	if h.cfg.TLS.CertPath == "" {
-		return nil, nil //nolint:nilnil // intentional: no TLS config when neither LetsEncrypt nor a cert path is set
-	}
-
-	tlsConfig := &tls.Config{
-		NextProtos:   []string{"http/1.1"},
-		Certificates: make([]tls.Certificate, 1),
-		MinVersion:   tls.VersionTLS12,
+		return &tlsBundle{}, nil
 	}
 
 	cert, err := tls.LoadX509KeyPair(h.cfg.TLS.CertPath, h.cfg.TLS.KeyPath)
 	if err != nil {
+		return nil, fmt.Errorf("loading TLS keypair (tls_cert_path=%q, tls_key_path=%q): %w",
+			h.cfg.TLS.CertPath, h.cfg.TLS.KeyPath, err)
+	}
+
+	tlsConfig := &tls.Config{
+		NextProtos:   []string{"http/1.1"},
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS12,
+	}
+
+	return &tlsBundle{Config: tlsConfig}, nil
+}
+
+// selfSignedTLSConfig returns a TLS config with a fresh in-memory certificate.
+// Its only clients skip verification (DERP InsecureForTests, and the noise
+// dialer, which authenticates the server itself), so the subject and validity
+// are arbitrary.
+func selfSignedTLSConfig() (*tls.Config, error) {
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
 		return nil, err
 	}
 
-	tlsConfig.Certificates[0] = cert
+	now := time.Now()
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "headscale"},
+		NotBefore:    now.Add(-time.Hour),
+		NotAfter:     now.AddDate(10, 0, 0),
+	}
 
-	return tlsConfig, nil
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &priv.PublicKey, priv)
+	if err != nil {
+		return nil, err
+	}
+
+	return &tls.Config{
+		NextProtos:   []string{"http/1.1"},
+		Certificates: []tls.Certificate{{Certificate: [][]byte{der}, PrivateKey: priv}},
+		MinVersion:   tls.VersionTLS12,
+	}, nil
 }
 
 func readOrCreatePrivateKey(path string) (*key.MachinePrivate, error) {
