@@ -101,6 +101,9 @@ Extension points:
   v1 and v2 REST APIs. New endpoints are added as resource modules.
 - **Audit log** (`headplane/app/server/audit/`) records user actions. New
   actions are added to the `AuditAction` type.
+- **Plugin system** (`headplane/app/plugins/`) allows third-party UI extensions
+  through a plugin API. See [Plugin Development Guide](../../headplane/docs/development/plugins.md)
+  for details on creating custom plugins that add routes, widgets, and navigation items.
 
 ## Monitoring and alerting
 
