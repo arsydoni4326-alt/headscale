@@ -634,10 +634,11 @@ func (s *State) DeleteNode(node types.NodeView) (change.Change, error) {
 	return c, nil
 }
 
-// Connect marks a node connected and returns the resulting changes
+// Connect acquires a control session and returns the resulting changes
 // plus a session epoch identifying this poll session. Every Connect
 // acquires one live session; the caller must release it with exactly
 // one [State.Disconnect] call once the session ends (see poll.go).
+// An expired key can keep polling control, but cannot make the node online.
 func (s *State) Connect(id types.NodeID) ([]change.Change, uint64) {
 	prevRoutes := s.nodeStore.PrimaryRoutes()
 
@@ -649,7 +650,7 @@ func (s *State) Connect(id types.NodeID) ([]change.Change, uint64) {
 		n.SessionEpoch++
 		epoch = n.SessionEpoch
 		n.ActiveSessions++
-		n.IsOnline = new(true)
+		n.IsOnline = new(n.ShouldBeOnline())
 		n.Unhealthy = false
 	})
 	if !ok {
@@ -660,6 +661,9 @@ func (s *State) Connect(id types.NodeID) ([]change.Change, uint64) {
 	// routers, relay targets, and via targets get their full peer recompute
 	// from the gated PolicyChange below, so no full update is needed here.
 	c := []change.Change{change.NodeOnline(node.ID())}
+	if !node.Online() {
+		c[0] = change.NodeAdded(node.ID())
+	}
 
 	log.Info().EmbedObject(node).Msg("node connected")
 
@@ -680,7 +684,7 @@ func (s *State) Connect(id types.NodeID) ([]change.Change, uint64) {
 }
 
 // Disconnect releases one poll session previously acquired by
-// [State.Connect] and marks the node offline only when that was its
+// [State.Connect] and marks the node offline when that was its
 // last live session. Sessions are counted rather than compared by
 // epoch: overlapping sessions for one node — a rapid reconnect, or a
 // cancelled map request whose handler ran late — release in any order
@@ -707,7 +711,7 @@ func (s *State) Disconnect(id types.NodeID, epoch uint64) ([]change.Change, erro
 
 		now := time.Now()
 		n.LastSeen = &now
-		n.IsOnline = new(false)
+		n.IsOnline = new(n.ShouldBeOnline())
 		// Offline nodes are not HA candidates; drop any stale
 		// Unhealthy bit so it does not surface in DebugRoutes.
 		n.Unhealthy = false
@@ -721,7 +725,7 @@ func (s *State) Disconnect(id types.NodeID, epoch uint64) ([]change.Change, erro
 		log.Debug().
 			Uint64("disconnect_epoch", epoch).
 			Int("active_sessions", node.ActiveSessions()).
-			Msg("session released, other sessions keep node online")
+			Msg("session released, other control sessions remain")
 
 		return nil, nil
 	}
@@ -906,13 +910,20 @@ func (s *State) ListEphemeralNodes() views.Slice[types.NodeView] {
 // SetNodeExpiry updates the expiration time for a node.
 // If expiry is nil, the node's expiry is disabled (node will never expire).
 func (s *State) SetNodeExpiry(nodeID types.NodeID, expiry *time.Time) (types.NodeView, change.Change, error) {
+	var onlineChanged bool
+
 	// Update [NodeStore] before database to ensure consistency. The [NodeStore] update
 	// is blocking and will be the source of truth for the batcher. The database update
 	// must make the exact same change. If the database update fails, the [NodeStore]
 	// change will remain, but since we return an error, no change notification will be
 	// sent to the batcher, preventing inconsistent state propagation.
 	n, ok := s.nodeStore.UpdateNode(nodeID, func(node *types.Node) {
+		wasOnline := node.Online()
 		node.Expiry = expiry
+		// Control stays connected in NeedsLogin so an expiry extension can
+		// recover the client, but an expired key is not online.
+		node.IsOnline = new(node.ShouldBeOnline())
+		onlineChanged = wasOnline != node.Online()
 	})
 
 	if !ok {
@@ -931,8 +942,11 @@ func (s *State) SetNodeExpiry(nodeID types.NodeID, expiry *time.Time) (types.Nod
 		return n, change.Change{}, fmt.Errorf("updating policy manager after setting expiry: %w", err)
 	}
 
-	if c.IsEmpty() {
-		c = change.NodeAdded(n.ID())
+	// Resolve expiry and online status together from the current snapshot
+	// when the mapper sends the change, including after a rapid restoration.
+	c = c.Merge(change.NodeAdded(n.ID()))
+	if onlineChanged && s.polMan.NodeNeedsPeerRecompute(n) {
+		c = c.Merge(change.PolicyChange())
 	}
 
 	return n, c, nil
@@ -1113,7 +1127,8 @@ func (s *State) ExpireExpiredNodes(lastCheck time.Time) (time.Time, []change.Cha
 	// while this function is running by using a consistent timestamp for the next check
 	started := time.Now()
 
-	var updates []change.Change
+	nodeUpdates := make(map[types.NodeID]UpdateNodeFunc)
+	expiredNodes := make(map[types.NodeID]bool)
 
 	for _, node := range s.nodeStore.ListNodes().All() { //nolint:unqueryvet // NodeStore.ListNodes not a SQL query
 		if !node.Valid() {
@@ -1122,9 +1137,34 @@ func (s *State) ExpireExpiredNodes(lastCheck time.Time) (time.Time, []change.Cha
 
 		// Why check After(lastCheck): We only want to notify about nodes that
 		// expired since the last check to avoid duplicate notifications
-		if node.IsExpired() && node.Expiry().Valid() && node.Expiry().Get().After(lastCheck) {
-			updates = append(updates, change.KeyExpiryFor(node.ID(), node.Expiry().Get()))
+		if !node.IsExpired() || !node.Expiry().Get().After(lastCheck) {
+			continue
 		}
+
+		nodeUpdates[node.ID()] = func(n *types.Node) {
+			// The key may have been restored since the snapshot was read.
+			if !n.IsExpired() || !n.Expiry.After(lastCheck) {
+				return
+			}
+
+			expiredNodes[n.ID] = n.Online()
+			n.IsOnline = new(n.ShouldBeOnline())
+		}
+	}
+
+	// Publish simultaneous expirations together so route election sees all
+	// unavailable nodes in one snapshot.
+	s.nodeStore.UpdateNodes(nodeUpdates)
+
+	updates := make([]change.Change, 0, len(expiredNodes))
+
+	for id, wasOnline := range expiredNodes {
+		c := change.NodeAdded(id)
+		if current, ok := s.nodeStore.GetNode(id); ok && wasOnline && s.polMan.NodeNeedsPeerRecompute(current) {
+			c = c.Merge(change.PolicyChange())
+		}
+
+		updates = append(updates, c)
 	}
 
 	if len(updates) > 0 {
@@ -1403,8 +1443,7 @@ var haHealthUpdates = promauto.NewCounterVec(prometheus.CounterOpts{
 func healthSetter(healthy bool) UpdateNodeFunc {
 	return func(n *types.Node) {
 		if !healthy {
-			online := n.IsOnline != nil && *n.IsOnline
-			if !online || len(n.AllApprovedRoutes()) == 0 {
+			if !n.Online() || len(n.AllApprovedRoutes()) == 0 {
 				haHealthUpdates.WithLabelValues("rejected").Inc()
 
 				return
@@ -1835,12 +1874,8 @@ func (s *State) applyAuthNodeUpdate(params authNodeUpdateParams) (types.NodeView
 		if len(regData.Endpoints) > 0 {
 			node.Endpoints = regData.Endpoints
 		}
-		// Do NOT reset IsOnline here. Online status is managed exclusively by
-		// [State.Connect]/[State.Disconnect] in the poll session lifecycle.
-		// Resetting it during re-registration causes a false offline blip: the
-		// change notification triggers a map regeneration showing the node as
-		// offline to peers, even though [State.Connect] will immediately set it
-		// back to true.
+		// Preserve online state during re-registration so a live node does
+		// not appear offline before the client restarts its map stream.
 		node.LastSeen = new(time.Now())
 
 		// On conversion (tagged → user) we set the new register method.
@@ -2010,19 +2045,13 @@ func (s *State) createAndSaveNewNode(params newNodeParams) (types.NodeView, erro
 			nodeToRegister.Tags = nil
 		}
 
-		nodeToRegister.AuthKey = params.PreAuthKey
+		nodeToRegister.AuthKey = params.PreAuthKey.AsCredential()
 		nodeToRegister.AuthKeyID = &params.PreAuthKey.ID
 	} else {
 		// Non-PreAuthKey registration (OIDC, CLI) - always user-owned
 		nodeToRegister.UserID = &params.User.ID
 		nodeToRegister.User = &params.User
 		nodeToRegister.Tags = nil
-	}
-
-	// Reject advertise-tags for PreAuthKey registrations early, before any resource allocation.
-	// PreAuthKey nodes get their tags from the key itself, not from client requests.
-	if params.PreAuthKey != nil && params.Hostinfo != nil && len(params.Hostinfo.RequestTags) > 0 {
-		return types.NodeView{}, fmt.Errorf("%w %v are invalid or not permitted", ErrRequestedTagsInvalidOrNotPermitted, params.Hostinfo.RequestTags)
 	}
 
 	// Process RequestTags (from tailscale up --advertise-tags) ONLY for non-PreAuthKey registrations.
@@ -2091,7 +2120,10 @@ func (s *State) createAndSaveNewNode(params newNodeParams) (types.NodeView, erro
 
 	// New node - database first to get ID, then [NodeStore]
 	savedNode, err := hsdb.Write(s.db.DB, func(tx *gorm.DB) (*types.Node, error) {
-		err := tx.Save(&nodeToRegister).Error
+		// Omit the AuthKey association: only auth_key_id is persisted here, the
+		// credential row is owned by the credential CRUD and must not be
+		// upserted from this node's (possibly stale) in-memory copy (#2862).
+		err := tx.Omit("AuthKey").Save(&nodeToRegister).Error
 		if err != nil {
 			return nil, fmt.Errorf("saving node: %w", err)
 		}
@@ -2101,6 +2133,10 @@ func (s *State) createAndSaveNewNode(params newNodeParams) (types.NodeView, erro
 			if err != nil {
 				return nil, fmt.Errorf("using pre auth key: %w", err)
 			}
+
+			// UsePreAuthKey marked the key used; refresh the node's in-memory
+			// AuthKey so the NodeStore copy matches the database.
+			nodeToRegister.AuthKey = params.PreAuthKey.AsCredential()
 		}
 
 		return &nodeToRegister, nil
@@ -2537,6 +2573,25 @@ func (s *State) HandleNodeFromPreAuthKey(
 		return types.NodeView{}, change.Change{}, err
 	}
 
+	// A pre-auth key node's tags come from the key, never from RequestTags.
+	// Advertising a subset of the key's tags is redundant, not an escalation,
+	// and the tailscale client's OAuth authkey flow always does it; any other
+	// tag is rejected. Checked before key validation or resource allocation so
+	// new nodes and re-registrations are held to the same rule.
+	if regReq.Hostinfo != nil {
+		var extraTags []string
+
+		for _, tag := range regReq.Hostinfo.RequestTags {
+			if !slices.Contains(pak.Tags, tag) {
+				extraTags = append(extraTags, tag)
+			}
+		}
+
+		if len(extraTags) > 0 {
+			return types.NodeView{}, change.Change{}, fmt.Errorf("%w %v are invalid or not permitted", ErrRequestedTagsInvalidOrNotPermitted, extraTags)
+		}
+	}
+
 	// Helper to get username for logging (handles nil User for tags-only keys)
 	pakUsername := func() string {
 		if pak.User != nil {
@@ -2724,12 +2779,16 @@ func (s *State) HandleNodeFromPreAuthKey(
 				}
 			}
 
-			node.AuthKey = pak
+			node.AuthKey = pak.AsCredential()
 			node.AuthKeyID = &pak.ID
-			// Do NOT reset IsOnline here. Online status is managed exclusively by
-			// [State.Connect]/[State.Disconnect] in the poll session lifecycle.
-			// Resetting it during re-registration causes a false offline blip
-			// to peers.
+			// If this registration will consume a single-use key (the tx below
+			// calls UsePreAuthKey under the same condition), reflect that in the
+			// cached AuthKey so the NodeStore copy matches the database.
+			if !pak.Reusable && !pak.Used {
+				node.AuthKey.Used = true
+			}
+			// Preserve online state during re-registration so a live node does
+			// not appear offline before the client restarts its map stream.
 			node.LastSeen = new(time.Now())
 
 			// Tagged nodes keep their existing expiry (disabled).

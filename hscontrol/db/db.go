@@ -3,19 +3,15 @@ package db
 import (
 	"context"
 	_ "embed"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net/netip"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"time"
 
 	"github.com/glebarez/sqlite"
 	"github.com/go-gormigrate/gormigrate/v2"
 	"github.com/juanfont/headscale/hscontrol/db/sqliteconfig"
-	"github.com/juanfont/headscale/hscontrol/policy"
 	"github.com/juanfont/headscale/hscontrol/types"
 	"github.com/juanfont/headscale/hscontrol/util"
 	"github.com/rs/zerolog/log"
@@ -49,13 +45,17 @@ type HSDatabase struct {
 }
 
 // NewHeadscaleDatabase creates a new database connection and runs migrations.
-// It accepts the full configuration to allow migrations access to policy settings.
 //
-//nolint:gocyclo // complex database initialization with many migrations
+//nolint:gocyclo // migration closures inflate the count; each is linear
 func NewHeadscaleDatabase(cfg *types.Config) (*HSDatabase, error) {
 	dbConn, err := openDB(cfg.Database)
 	if err != nil {
 		return nil, err
+	}
+
+	err = checkMinimumMigration(dbConn)
+	if err != nil {
+		return nil, fmt.Errorf("version check: %w", err)
 	}
 
 	err = checkVersionUpgradePath(dbConn)
@@ -511,263 +511,28 @@ AND auth_key_id NOT IN (
 			// the rules it sets out.
 
 			// From this point, the following rules must be followed:
+=======
+			// Migrations start from v0.29.0; older databases are rejected by
+			// checkMinimumMigration and must upgrade to the latest 0.29.x first.
+			//
+			// Rules:
+>>>>>>> upstream/main
 			// - NEVER use gorm.AutoMigrate, write the exact migration steps needed
 			// - AutoMigrate depends on the struct staying exactly the same, which it won't over time.
 			// - Never write migrations that requires foreign keys to be disabled.
 			// - ALL errors in migrations must be handled properly.
-
-			{
-				// Add columns for prefix and hash for pre auth keys, implementing
-				// them with the same security model as api keys.
-				ID: "202511011637-preauthkey-bcrypt",
-				Migrate: func(tx *gorm.DB) error {
-					// Check and add prefix column if it doesn't exist
-					if !tx.Migrator().HasColumn(&types.PreAuthKey{}, "prefix") {
-						err := tx.Migrator().AddColumn(&types.PreAuthKey{}, "prefix")
-						if err != nil {
-							return fmt.Errorf("adding prefix column: %w", err)
-						}
-					}
-
-					// Check and add hash column if it doesn't exist
-					if !tx.Migrator().HasColumn(&types.PreAuthKey{}, "hash") {
-						err := tx.Migrator().AddColumn(&types.PreAuthKey{}, "hash")
-						if err != nil {
-							return fmt.Errorf("adding hash column: %w", err)
-						}
-					}
-
-					// Create partial unique index to allow multiple legacy keys (NULL/empty prefix)
-					// while enforcing uniqueness for new bcrypt-based keys
-					err := tx.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_pre_auth_keys_prefix ON pre_auth_keys(prefix) WHERE prefix IS NOT NULL AND prefix != ''").Error
-					if err != nil {
-						return fmt.Errorf("creating prefix index: %w", err)
-					}
-
-					return nil
-				},
-				Rollback: func(db *gorm.DB) error { return nil },
-			},
-			{
-				ID: "202511122344-remove-newline-index",
-				Migrate: func(tx *gorm.DB) error {
-					// Reformat multi-line indexes to single-line for consistency
-					// This migration drops and recreates the three user identity indexes
-					// to match the single-line format expected by schema validation
-
-					// Drop existing multi-line indexes
-					dropIndexes := []string{
-						`DROP INDEX IF EXISTS idx_provider_identifier`,
-						`DROP INDEX IF EXISTS idx_name_provider_identifier`,
-						`DROP INDEX IF EXISTS idx_name_no_provider_identifier`,
-					}
-
-					for _, dropSQL := range dropIndexes {
-						err := tx.Exec(dropSQL).Error
-						if err != nil {
-							return fmt.Errorf("dropping index: %w", err)
-						}
-					}
-
-					// Recreate indexes in single-line format
-					createIndexes := []string{
-						`CREATE UNIQUE INDEX idx_provider_identifier ON users(provider_identifier) WHERE provider_identifier IS NOT NULL`,
-						`CREATE UNIQUE INDEX idx_name_provider_identifier ON users(name, provider_identifier)`,
-						`CREATE UNIQUE INDEX idx_name_no_provider_identifier ON users(name) WHERE provider_identifier IS NULL`,
-					}
-
-					for _, createSQL := range createIndexes {
-						err := tx.Exec(createSQL).Error
-						if err != nil {
-							return fmt.Errorf("creating index: %w", err)
-						}
-					}
-
-					return nil
-				},
-				Rollback: func(db *gorm.DB) error { return nil },
-			},
-			{
-				// Rename forced_tags column to tags in nodes table.
-				// This must run after migration 202505141324 which creates tables with forced_tags.
-				ID: "202511131445-node-forced-tags-to-tags",
-				Migrate: func(tx *gorm.DB) error {
-					// Rename the column from forced_tags to tags
-					err := tx.Migrator().RenameColumn(&types.Node{}, "forced_tags", "tags")
-					if err != nil {
-						return fmt.Errorf("renaming forced_tags to tags: %w", err)
-					}
-
-					return nil
-				},
-				Rollback: func(db *gorm.DB) error { return nil },
-			},
-			{
-				// Migrate RequestTags from host_info JSON to tags column.
-				// In 0.27.x, tags from --advertise-tags (ValidTags) were stored only in
-				// host_info.RequestTags, not in the tags column (formerly forced_tags).
-				// This migration validates RequestTags against the policy's tagOwners
-				// and merges validated tags into the tags column.
-				// Fixes: https://github.com/juanfont/headscale/issues/3006
-				ID: "202601121700-migrate-hostinfo-request-tags",
-				Migrate: func(tx *gorm.DB) error {
-					// 1. Load policy from file or database based on configuration
-					policyData, err := PolicyBytes(tx, cfg)
-					if err != nil {
-						log.Warn().Err(err).Msg("failed to load policy, skipping RequestTags migration (tags will be validated on node reconnect)")
-						return nil
-					}
-
-					if len(policyData) == 0 {
-						log.Info().Msg("no policy found, skipping RequestTags migration (tags will be validated on node reconnect)")
-						return nil
-					}
-
-					// 2. Load users and nodes to create PolicyManager
-					users, err := ListUsers(tx, nil)
-					if err != nil {
-						return fmt.Errorf("loading users for RequestTags migration: %w", err)
-					}
-
-					nodes, err := ListNodes(tx)
-					if err != nil {
-						return fmt.Errorf("loading nodes for RequestTags migration: %w", err)
-					}
-
-					// 3. Create PolicyManager (handles HuJSON parsing, groups, nested tags, etc.)
-					polMan, err := policy.NewPolicyManager(policyData, users, nodes.ViewSlice())
-					if err != nil {
-						log.Warn().Err(err).Msg("failed to parse policy, skipping RequestTags migration (tags will be validated on node reconnect)")
-						return nil
-					}
-
-					// 4. Process each node
-					for _, node := range nodes {
-						if node.Hostinfo == nil {
-							continue
-						}
-
-						requestTags := node.Hostinfo.RequestTags
-						if len(requestTags) == 0 {
-							continue
-						}
-
-						existingTags := node.Tags
-
-						var validatedTags, rejectedTags []string
-
-						nodeView := node.View()
-
-						for _, tag := range requestTags {
-							if polMan.NodeCanHaveTag(nodeView, tag) {
-								if !slices.Contains(existingTags, tag) {
-									validatedTags = append(validatedTags, tag)
-								}
-							} else {
-								rejectedTags = append(rejectedTags, tag)
-							}
-						}
-
-						if len(validatedTags) == 0 {
-							if len(rejectedTags) > 0 {
-								log.Debug().
-									EmbedObject(node).
-									Strs("rejected_tags", rejectedTags).
-									Msg("RequestTags rejected during migration (not authorized)")
-							}
-
-							continue
-						}
-
-						mergedTags := append(slices.Clone(existingTags), validatedTags...)
-						slices.Sort(mergedTags)
-						mergedTags = slices.Compact(mergedTags)
-
-						tagsJSON, err := json.Marshal(mergedTags)
-						if err != nil {
-							return fmt.Errorf("serializing merged tags for node %d: %w", node.ID, err)
-						}
-
-						err = tx.Exec("UPDATE nodes SET tags = ? WHERE id = ?", string(tagsJSON), node.ID).Error
-						if err != nil {
-							return fmt.Errorf("updating tags for node %d: %w", node.ID, err)
-						}
-
-						log.Info().
-							EmbedObject(node).
-							Strs("validated_tags", validatedTags).
-							Strs("rejected_tags", rejectedTags).
-							Strs("existing_tags", existingTags).
-							Strs("merged_tags", mergedTags).
-							Msg("Migrated validated RequestTags from host_info to tags column")
-					}
-
-					return nil
-				},
-				Rollback: func(db *gorm.DB) error { return nil },
-			},
-			{
-				// Clear user_id on tagged nodes.
-				// Tagged nodes are owned by their tags, not a user.
-				// Previously user_id was kept as "created by" tracking,
-				// but this prevents deleting users whose nodes have been
-				// tagged, and the ON DELETE CASCADE FK would destroy the
-				// tagged nodes if the user were deleted.
-				//
-				// A nil tags slice marshals to the JSON literal 'null', so
-				// untagged nodes can carry tags='null'. That spelling must be
-				// excluded alongside '[]' and '' or untagged nodes lose their
-				// user. Nodes already detached by the earlier version of this
-				// migration are repaired by the recovery migration below.
-				// Fixes: https://github.com/juanfont/headscale/issues/3077
-				// Fixes: https://github.com/juanfont/headscale/issues/3323
-				ID: "202602201200-clear-tagged-node-user-id",
-				Migrate: func(tx *gorm.DB) error {
-					err := tx.Exec(`
-UPDATE nodes
-SET user_id = NULL
-WHERE tags IS NOT NULL AND tags != '[]' AND tags != '' AND tags != 'null';
-						`).Error
-					if err != nil {
-						return fmt.Errorf("clearing user_id on tagged nodes: %w", err)
-					}
-
-					return nil
-				},
-				Rollback: func(db *gorm.DB) error { return nil },
-			},
-			{
-				// Clear zero-time node expiry values to NULL.
-				// Versions before 0.28 persisted a pointer to a zero
-				// time.Time as '0001-01-01 00:00:00+00:00' rather than
-				// NULL, which 0.29 reports as an expired node. This
-				// normalises the existing rows so the column once
-				// again means "no expiry" when unset.
-				ID: "202605221435-clear-zero-time-node-expiry",
-				Migrate: func(tx *gorm.DB) error {
-					err := tx.Exec(`
-UPDATE nodes
-SET expiry = NULL
-WHERE expiry IS NOT NULL AND expiry < '1900-01-01';
-						`).Error
-					if err != nil {
-						return fmt.Errorf("clearing zero-time node expiry: %w", err)
-					}
-
-					return nil
-				},
-				Rollback: func(db *gorm.DB) error { return nil },
-			},
+			// Shipped in 0.29.1.
+			// TODO(kradalby): remove in 0.31, which upgrades only from 0.30.
 			{
 				// Recover user_id on untagged nodes detached by the earlier
 				// version of 202602201200-clear-tagged-node-user-id, which
 				// treated tags='null' as tagged and cleared the user. This
-				// repairs databases that already upgraded to 0.29.0; fresh
-				// upgrades are protected by the fixed migration above and find
-				// nothing to repair. Recovery is best-effort: the owner is
-				// re-derived from the node's pre-auth key, so nodes registered
-				// via CLI/OIDC (no pre-auth key) cannot be recovered and must
-				// be reassigned manually.
+				// repairs databases that already upgraded to 0.29.0; databases
+				// that took the fixed migration find nothing to repair.
+				// Recovery is best-effort: the owner is re-derived from the
+				// node's pre-auth key, so nodes registered via CLI/OIDC (no
+				// pre-auth key) cannot be recovered and must be reassigned
+				// manually.
 				// Fixes: https://github.com/juanfont/headscale/issues/3323
 				ID: "202606181200-recover-null-tags-node-user-id",
 				Migrate: func(tx *gorm.DB) error {
@@ -788,6 +553,8 @@ WHERE user_id IS NULL
 				},
 				Rollback: func(db *gorm.DB) error { return nil },
 			},
+			// 0.30 development: columns and tables that 202609231300 reads.
+			// TODO(kradalby): remove in 0.31 with the credentials migration.
 			{
 				// Add an optional owning user to API keys so the v2 API can
 				// create user-owned (untagged) auth keys, mirroring Tailscale's
@@ -907,6 +674,8 @@ WHERE user_id IS NULL
 				},
 				Rollback: func(db *gorm.DB) error { return nil },
 			},
+			// Shipped in 0.29.3.
+			// TODO(kradalby): remove in 0.31, which upgrades only from 0.30.
 			{
 				// Clear stale key expiry on tagged nodes. A tagged node is
 				// owned by its tags and never expires (KB 1068), but a buggy
@@ -914,8 +683,8 @@ WHERE user_id IS NULL
 				// permanently Expired and unable to re-authenticate. The
 				// buggy writer is fixed, so this only repairs rows written
 				// before the upgrade; a fixed server cannot recreate them.
-				// Match the tagged-node predicate the earlier
-				// clear-tagged-node-user-id migration uses (a nil tags slice
+				// Match the tagged-node predicate of 0.29's
+				// clear-tagged-node-user-id migration (a nil tags slice
 				// marshals to 'null', so exclude it).
 				// Fixes: https://github.com/juanfont/headscale/issues/3371
 				ID: "202607241200-clear-tagged-node-expiry",
@@ -964,22 +733,49 @@ WHERE tags IS NOT NULL AND tags != '[]' AND tags != '' AND tags != 'null'
 				Rollback: func(tx *gorm.DB) error {
 					return tx.Migrator().DropTable(&types.Webhook{})
 				},
+=======
+			// 0.30: unified credentials table (InitSchema keeps ensureCredentialsTable).
+			// TODO(kradalby): remove in 0.31 with the credentials migration.
+			{
+				// Create the unified credentials table; the next migration
+				// backfills it. Explicit DDL for both dialects (no AutoMigrate).
+				ID:       "202609231200-create-credentials",
+				Migrate:  ensureCredentialsTable,
+				Rollback: func(db *gorm.DB) error { return nil },
+			},
+			{
+				// Move every credential into the unified table and drop the
+				// per-kind tables (see migrateToCredentials).
+				ID: "202609231300-migrate-to-credentials",
+				Migrate: func(tx *gorm.DB) error {
+					// Already migrated (e.g. fresh DB via InitSchema): nothing to do.
+					if !tx.Migrator().HasTable("pre_auth_keys") &&
+						!tx.Migrator().HasTable("api_keys") {
+						return nil
+					}
+
+					return tx.Transaction(migrateToCredentials)
+				},
+				Rollback: func(db *gorm.DB) error { return nil },
 			},
 		},
 	)
 
 	migrations.InitSchema(func(tx *gorm.DB) error {
-		// Create all tables using AutoMigrate
-		err := tx.AutoMigrate(
-			&types.User{},
-			&types.PreAuthKey{},
-			&types.APIKey{},
-			&types.Node{},
-			&types.Policy{},
-			&types.OAuthClient{},
-			&types.OAuthAccessToken{},
-			&types.Webhook{},
-		)
+		// Credentials use the migration's explicit DDL (AutoMigrate cannot
+		// express its CHECK constraints), created before Node so the
+		// nodes.auth_key_id foreign key to credentials(id) can be created.
+		err := tx.AutoMigrate(&types.User{})
+		if err != nil {
+			return err
+		}
+
+		err = ensureCredentialsTable(tx)
+		if err != nil {
+			return err
+		}
+
+		err = tx.AutoMigrate(&types.Node{}, &types.Policy{}, &types.Webhook{})
 		if err != nil {
 			return err
 		}
@@ -988,14 +784,11 @@ WHERE tags IS NOT NULL AND tags != '[]' AND tags != '' AND tags != 'null'
 		// to ensure we can recreate them in the correct format
 		dropIndexes := []string{
 			`DROP INDEX IF EXISTS "idx_users_deleted_at"`,
-			`DROP INDEX IF EXISTS "idx_api_keys_prefix"`,
 			`DROP INDEX IF EXISTS "idx_policies_deleted_at"`,
 			`DROP INDEX IF EXISTS "idx_provider_identifier"`,
 			`DROP INDEX IF EXISTS "idx_name_provider_identifier"`,
 			`DROP INDEX IF EXISTS "idx_name_no_provider_identifier"`,
-			`DROP INDEX IF EXISTS "idx_pre_auth_keys_prefix"`,
-			`DROP INDEX IF EXISTS "idx_oauth_clients_client_id"`,
-			`DROP INDEX IF EXISTS "idx_oauth_access_tokens_prefix"`,
+			`DROP INDEX IF EXISTS "idx_nodes_auth_key_id"`,
 		}
 
 		for _, dropSQL := range dropIndexes {
@@ -1008,14 +801,11 @@ WHERE tags IS NOT NULL AND tags != '[]' AND tags != '' AND tags != 'null'
 		// Recreate indexes without backticks to match schema.sql format
 		indexes := []string{
 			`CREATE INDEX idx_users_deleted_at ON users(deleted_at)`,
-			`CREATE UNIQUE INDEX idx_api_keys_prefix ON api_keys(prefix)`,
 			`CREATE INDEX idx_policies_deleted_at ON policies(deleted_at)`,
 			`CREATE UNIQUE INDEX idx_provider_identifier ON users(provider_identifier) WHERE provider_identifier IS NOT NULL`,
 			`CREATE UNIQUE INDEX idx_name_provider_identifier ON users(name, provider_identifier)`,
 			`CREATE UNIQUE INDEX idx_name_no_provider_identifier ON users(name) WHERE provider_identifier IS NULL`,
-			`CREATE UNIQUE INDEX idx_pre_auth_keys_prefix ON pre_auth_keys(prefix) WHERE prefix IS NOT NULL AND prefix != ''`,
-			`CREATE UNIQUE INDEX idx_oauth_clients_client_id ON oauth_clients(client_id)`,
-			`CREATE UNIQUE INDEX idx_oauth_access_tokens_prefix ON oauth_access_tokens(prefix)`,
+			`CREATE INDEX idx_nodes_auth_key_id ON nodes(auth_key_id)`,
 		}
 
 		for _, indexSQL := range indexes {
@@ -1198,27 +988,6 @@ func openDB(cfg types.DatabaseConfig) (*gorm.DB, error) {
 
 func runMigrations(cfg types.DatabaseConfig, dbConn *gorm.DB, migrations *gormigrate.Gormigrate) error {
 	if cfg.Type == types.DatabaseSqlite {
-		// SQLite: Run the early migrations that GORM cannot handle safely with
-		// foreign keys enabled (route and pre-auth-key automigrations) with FK
-		// disabled, then run everything else with FK enabled.
-		//
-		// NO NEW MIGRATIONS SHOULD RUN WITH FK DISABLED. As of 2025-07-02, all
-		// new migrations must run with foreign keys enabled via the
-		// migrations.Migrate() call below.
-		if err := dbConn.Exec("PRAGMA foreign_keys = OFF").Error; err != nil { //nolint:noinlineerr
-			return fmt.Errorf("disabling foreign keys: %w", err)
-		}
-
-		// Run up to and including the last migration that requires FK disabled.
-		if err := migrations.MigrateTo("202501311657"); err != nil { //nolint:noinlineerr
-			return fmt.Errorf("running migration 202501311657: %w", err)
-		}
-
-		if err := dbConn.Exec("PRAGMA foreign_keys = ON").Error; err != nil { //nolint:noinlineerr
-			return fmt.Errorf("restoring foreign keys: %w", err)
-		}
-
-		// Run the rest of the migrations
 		if err := migrations.Migrate(); err != nil { //nolint:noinlineerr
 			return err
 		}
