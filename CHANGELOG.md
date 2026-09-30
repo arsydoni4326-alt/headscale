@@ -4,6 +4,23 @@
 
 **Minimum supported Tailscale client version: v1.82.0**
 
+### Monitoring/Alerting Webhooks (Phase 11, Task 3)
+
+Added webhook support for monitoring and alerting integrations:
+
+- **Webhook API** - Full CRUD API at `/api/v1/webhooks` for managing webhook configurations
+- **Event types** - Support for `node_up`, `node_down`, `health_check_fail`, and `alert_firing` events
+- **HMAC signing** - Optional HMAC-SHA256 payload signing for webhook security via `X-Headscale-Signature` header
+- **Custom headers** - Support for custom HTTP headers (e.g., authorization tokens)
+- **Configurable timeouts** - Per-webhook timeout configuration (default: 10 seconds)
+- **Event filtering** - Each webhook can subscribe to specific event types
+- **Prometheus metrics** - `headscale_webhook_dispatch_total` (counter) and `headscale_webhook_dispatch_duration_seconds` (histogram)
+- **Database storage** - Webhook configurations persisted in database with enabled/disabled state
+- **Comprehensive documentation** - Added `docs/usage/webhooks.md` with API examples, security best practices, and integration guides for Prometheus Alertmanager and Grafana
+- **Unit tests** - Tests for HMAC signature generation, webhook dispatch, and event type validation
+
+Migration: `202609301000-create-webhooks-table` adds the `webhooks` table.
+
 ### v1 REST API replaced; gRPC and Protobuf removed
 
 The v1 REST API now provides an OpenAPI 3.1 specification at
