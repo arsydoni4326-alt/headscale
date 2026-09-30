@@ -116,6 +116,39 @@ type CreateUserRequestBody struct {
 	PictureUrl  *string `json:"pictureUrl,omitempty"`
 }
 
+// CurrentVersionResponse defines model for CurrentVersionResponse.
+type CurrentVersionResponse struct {
+	BuildTime string `json:"buildTime"`
+	Commit    string `json:"commit"`
+	Dirty     bool   `json:"dirty"`
+	Version   string `json:"version"`
+}
+
+// DERPNode defines model for DERPNode.
+type DERPNode struct {
+	DerpPort int64  `json:"derpPort"`
+	HostName string `json:"hostName"`
+	Ipv4     string `json:"ipv4"`
+	Ipv6     string `json:"ipv6"`
+	Name     string `json:"name"`
+	StunPort int64  `json:"stunPort"`
+}
+
+// DERPRegion defines model for DERPRegion.
+type DERPRegion struct {
+	Nodes      *[]DERPNode `json:"nodes"`
+	RegionCode string      `json:"regionCode"`
+	RegionId   int64       `json:"regionId"`
+	RegionName string      `json:"regionName"`
+}
+
+// DERPResponseBody defines model for DERPResponseBody.
+type DERPResponseBody struct {
+	Configured   bool          `json:"configured"`
+	Regions      *[]DERPRegion `json:"regions"`
+	TotalRegions int64         `json:"totalRegions"`
+}
+
 // DebugCreateNodeRequestBody defines model for DebugCreateNodeRequestBody.
 type DebugCreateNodeRequestBody struct {
 	Key    *string   `json:"key,omitempty"`
@@ -289,6 +322,13 @@ type PreAuthKeyOutputBody struct {
 	PreAuthKey PreAuthKey `json:"preAuthKey"`
 }
 
+// RemoteVersionResponse defines model for RemoteVersionResponse.
+type RemoteVersionResponse struct {
+	Commit  string  `json:"commit"`
+	Url     string  `json:"url"`
+	Version *string `json:"version,omitempty"`
+}
+
 // SetApprovedRoutesRequestBody defines model for SetApprovedRoutesRequestBody.
 type SetApprovedRoutesRequestBody struct {
 	Routes *[]string `json:"routes,omitempty"`
@@ -299,6 +339,14 @@ type SetTagsRequestBody struct {
 	Tags *[]string `json:"tags,omitempty"`
 }
 
+// UpdateCheckResult defines model for UpdateCheckResult.
+type UpdateCheckResult struct {
+	Current         CurrentVersionResponse `json:"current"`
+	Error           *string                `json:"error,omitempty"`
+	Remote          *RemoteVersionResponse `json:"remote,omitempty"`
+	UpdateAvailable *bool                  `json:"updateAvailable,omitempty"`
+}
+
 // User defines model for User.
 type User struct {
 	CreatedAt     time.Time `json:"createdAt"`
@@ -306,6 +354,7 @@ type User struct {
 	Email         string    `json:"email"`
 	Id            string    `json:"id"`
 	Name          string    `json:"name"`
+	OidcGroups    *[]string `json:"oidcGroups"`
 	ProfilePicUrl string    `json:"profilePicUrl"`
 	Provider      string    `json:"provider"`
 	ProviderId    string    `json:"providerId"`
@@ -343,6 +392,12 @@ type RegisterNodeParams struct {
 // DeletePreAuthKeyParams defines parameters for DeletePreAuthKey.
 type DeletePreAuthKeyParams struct {
 	Id *string `form:"id,omitempty" json:"id,omitempty"`
+}
+
+// UpdateCheckParams defines parameters for UpdateCheck.
+type UpdateCheckParams struct {
+	// Check When "true", additionally fetch the remote latest commit and compare it with the running binary.
+	Check *string `form:"check,omitempty" json:"check,omitempty"`
 }
 
 // ListUsersParams defines parameters for ListUsers.
@@ -503,6 +558,9 @@ type ClientInterface interface {
 
 	DebugCreateNode(ctx context.Context, body DebugCreateNodeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetDerp request
+	GetDerp(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// Health request
 	Health(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -567,6 +625,9 @@ type ClientInterface interface {
 	ExpirePreAuthKeyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	ExpirePreAuthKey(ctx context.Context, body ExpirePreAuthKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateCheck request
+	UpdateCheck(ctx context.Context, params *UpdateCheckParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListUsers request
 	ListUsers(ctx context.Context, params *ListUsersParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -741,6 +802,18 @@ func (c *Client) DebugCreateNodeWithBody(ctx context.Context, contentType string
 
 func (c *Client) DebugCreateNode(ctx context.Context, body DebugCreateNodeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDebugCreateNodeRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetDerp(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetDerpRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -1029,6 +1102,18 @@ func (c *Client) ExpirePreAuthKeyWithBody(ctx context.Context, contentType strin
 
 func (c *Client) ExpirePreAuthKey(ctx context.Context, body ExpirePreAuthKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewExpirePreAuthKeyRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateCheck(ctx context.Context, params *UpdateCheckParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateCheckRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -1423,6 +1508,33 @@ func NewDebugCreateNodeRequestWithBody(server string, contentType string, body i
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetDerpRequest generates requests for GetDerp
+func NewGetDerpRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/derp")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -2146,6 +2258,60 @@ func NewExpirePreAuthKeyRequestWithBody(server string, contentType string, body 
 	return req, nil
 }
 
+// NewUpdateCheckRequest generates requests for UpdateCheck
+func NewUpdateCheckRequest(server string, params *UpdateCheckParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/update-check")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Check != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "check", *params.Check, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewListUsersRequest generates requests for ListUsers
 func NewListUsersRequest(server string, params *ListUsersParams) (*http.Request, error) {
 	var err error
@@ -2418,6 +2584,9 @@ type ClientWithResponsesInterface interface {
 
 	DebugCreateNodeWithResponse(ctx context.Context, body DebugCreateNodeJSONRequestBody, reqEditors ...RequestEditorFn) (*DebugCreateNodeResponse, error)
 
+	// GetDerpWithResponse request
+	GetDerpWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetDerpResponse, error)
+
 	// HealthWithResponse request
 	HealthWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*HealthResponse, error)
 
@@ -2482,6 +2651,9 @@ type ClientWithResponsesInterface interface {
 	ExpirePreAuthKeyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ExpirePreAuthKeyResponse, error)
 
 	ExpirePreAuthKeyWithResponse(ctx context.Context, body ExpirePreAuthKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*ExpirePreAuthKeyResponse, error)
+
+	// UpdateCheckWithResponse request
+	UpdateCheckWithResponse(ctx context.Context, params *UpdateCheckParams, reqEditors ...RequestEditorFn) (*UpdateCheckResponse, error)
 
 	// ListUsersWithResponse request
 	ListUsersWithResponse(ctx context.Context, params *ListUsersParams, reqEditors ...RequestEditorFn) (*ListUsersResponse, error)
@@ -2740,6 +2912,37 @@ func (r DebugCreateNodeResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r DebugCreateNodeResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetDerpResponse struct {
+	Body                          []byte
+	HTTPResponse                  *http.Response
+	JSON200                       *DERPResponseBody
+	ApplicationproblemJSONDefault *ErrorModel
+}
+
+// Status returns HTTPResponse.Status
+func (r GetDerpResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetDerpResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetDerpResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -3273,6 +3476,37 @@ func (r ExpirePreAuthKeyResponse) ContentType() string {
 	return ""
 }
 
+type UpdateCheckResponse struct {
+	Body                          []byte
+	HTTPResponse                  *http.Response
+	JSON200                       *UpdateCheckResult
+	ApplicationproblemJSONDefault *ErrorModel
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateCheckResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateCheckResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UpdateCheckResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ListUsersResponse struct {
 	Body                          []byte
 	HTTPResponse                  *http.Response
@@ -3517,6 +3751,15 @@ func (c *ClientWithResponses) DebugCreateNodeWithResponse(ctx context.Context, b
 	return ParseDebugCreateNodeResponse(rsp)
 }
 
+// GetDerpWithResponse request returning *GetDerpResponse
+func (c *ClientWithResponses) GetDerpWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetDerpResponse, error) {
+	rsp, err := c.GetDerp(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetDerpResponse(rsp)
+}
+
 // HealthWithResponse request returning *HealthResponse
 func (c *ClientWithResponses) HealthWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*HealthResponse, error) {
 	rsp, err := c.Health(ctx, reqEditors...)
@@ -3724,6 +3967,15 @@ func (c *ClientWithResponses) ExpirePreAuthKeyWithResponse(ctx context.Context, 
 		return nil, err
 	}
 	return ParseExpirePreAuthKeyResponse(rsp)
+}
+
+// UpdateCheckWithResponse request returning *UpdateCheckResponse
+func (c *ClientWithResponses) UpdateCheckWithResponse(ctx context.Context, params *UpdateCheckParams, reqEditors ...RequestEditorFn) (*UpdateCheckResponse, error) {
+	rsp, err := c.UpdateCheck(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateCheckResponse(rsp)
 }
 
 // ListUsersWithResponse request returning *ListUsersResponse
@@ -4017,6 +4269,39 @@ func ParseDebugCreateNodeResponse(rsp *http.Response) (*DebugCreateNodeResponse,
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest NodeOutputBody
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetDerpResponse parses an HTTP response from a GetDerpWithResponse call
+func ParseGetDerpResponse(rsp *http.Response) (*GetDerpResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetDerpResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DERPResponseBody
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -4578,6 +4863,39 @@ func ParseExpirePreAuthKeyResponse(rsp *http.Response) (*ExpirePreAuthKeyRespons
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest ExpirePreAuthKeyOutputBody
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorModel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateCheckResponse parses an HTTP response from a UpdateCheckWithResponse call
+func ParseUpdateCheckResponse(rsp *http.Response) (*UpdateCheckResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateCheckResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest UpdateCheckResult
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

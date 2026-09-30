@@ -257,6 +257,47 @@ func (h *Headscale) HealthHandler(
 	respond(nil)
 }
 
+// ReadyHandler returns the readiness status of the Headscale server.
+// This endpoint is intended for Kubernetes-style readiness probes.
+// It checks if the server is ready to accept traffic (database connectivity).
+// Unlike /health, this may return 503 during startup or maintenance windows.
+func (h *Headscale) ReadyHandler(
+	writer http.ResponseWriter,
+	req *http.Request,
+) {
+	respond := func(ready bool, err error) {
+		writer.Header().Set("Content-Type", "application/json")
+
+		res := struct {
+			Ready  bool   `json:"ready"`
+			Status string `json:"status"`
+		}{
+			Ready:  ready,
+			Status: "ready",
+		}
+
+		if !ready {
+			writer.WriteHeader(http.StatusServiceUnavailable)
+			res.Status = "not ready"
+		}
+
+		encErr := json.NewEncoder(writer).Encode(res)
+		if encErr != nil {
+			log.Error().Err(encErr).Msg("failed to encode readiness response")
+		}
+	}
+
+	// Check database connectivity
+	err := h.state.PingDB(req.Context())
+	if err != nil {
+		log.Warn().Err(err).Msg("readiness check failed: database not reachable")
+		respond(false, err)
+		return
+	}
+
+	respond(true, nil)
+}
+
 func (h *Headscale) RobotsHandler(
 	writer http.ResponseWriter,
 	req *http.Request,

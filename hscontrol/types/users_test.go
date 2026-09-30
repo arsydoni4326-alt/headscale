@@ -528,6 +528,7 @@ func TestOIDCClaimsJSONToUser(t *testing.T) {
 					Valid:  true,
 				},
 				ProfilePicURL: "https://cdn.casbin.org/img/casbin.svg",
+				OIDCGroups:    []string{"org1/department1", "org1/department2"},
 			},
 		},
 	}

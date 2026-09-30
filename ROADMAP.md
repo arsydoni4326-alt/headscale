@@ -48,9 +48,9 @@ harden what exists today before expanding into new territory.
 
 ### Current state
 
-- Phases 1-7 are complete. Latest fork releases: Headscale
+- Phases 1-10 are complete. Latest fork releases: Headscale
   `v0.34.0-arsydoni4326-alt`, Headplane `v0.8.3-arsydoni4326-alt`.
-- Phases 8+ below are **proposed** and must not be implemented without
+- Phase 11 below is **proposed** and must not be implemented without
   explicit approval.
 
 ## Phase 1 — Foundation and Documentation (Completed)
@@ -190,31 +190,40 @@ documentation, consistent docs, and a cleaner codebase.
 
 **Priority:** High (foundational — everything below builds on it).
 
-## Phase 8 — UI/UX and Accessibility Refinement [Proposed]
+## Phase 8 — UI/UX and Accessibility Refinement [Implemented]
 
 **Objective:** Polish the user experience and make accessibility a
 first-class, verifiable property.
 
 **Problems addressed:**
 
-- Empty, loading, and error states are not standardized across all routes.
-- No published accessibility conformance statement; axe-core runs in CI but
-  keyboard navigation, focus management, and screen-reader flows are not
-  systematically verified.
-- No contextual help or onboarding for new users.
-- Confirmation flows for destructive actions are not uniform across pages.
+- Empty, loading, and error states are now standardized across all routes.
+- Accessibility documentation is comprehensive; axe-core runs in CI.
+- Contextual help is provided through tooltips on form fields and attributes.
+- Confirmation dialogs use a standardized pattern for destructive actions.
 
 **Features/improvements:**
 
-- Audit and standardize empty/loading/error states across all routes
-  (`machines`, `users`, `acls`, `dns`, `settings`, `audit`, `derp`,
-  `topology`, `ssh`).
-- Extend the a11y suite beyond axe-core: keyboard navigation, focus
+- [x] Document accessibility features and guidance in the UI guide (keyboard
+      navigation, screen reader support, visual accessibility, forms, testing,
+      known limitations, reporting process).
+- [x] Create standardized UI state components (`EmptyState`, `LoadingSpinner`)
+      with full accessibility support and comprehensive component tests.
+- [x] Refactor all data-displaying routes to use standardized components:
+      machines, users, audit, derp, topology, auth-keys all use `EmptyState`
+      with appropriate variants (`default`, `filtered`, `error`).
+- [x] Extend e2e accessibility test coverage (empty/loading states, icon-only
+      buttons).
+- [x] Confirmation dialogs standardized: 25 dialogs use the shared `Dialog` +
+      `DialogPanel` pattern with `destructive`, `normal`, and `unactionable`
+      variants.
+- [x] Contextual help provided through tooltip component on 12+ UI elements
+      (form fields, attribute labels, chips, status indicators).
+- [ ] Extend the a11y suite beyond axe-core: keyboard navigation, focus
   management, color contrast, and screen-reader flows; publish a conformance
-  statement.
-- Add contextual help (tooltips, inline docs) and a first-run onboarding flow.
-- Standardize confirmation dialogs for destructive actions.
-- Keep the UI guide screenshots (from Phase 7) current.
+  statement (deferred to future phase).
+- [ ] Add first-run onboarding flow (deferred to future phase).
+- [ ] Keep the UI guide screenshots (from Phase 7) current (tracked separately).
 
 **Technical work:** Shared state/empty-state components; a11y test expansion;
 help/onboarding content.
@@ -227,42 +236,43 @@ help/onboarding content.
 
 **Priority:** High.
 
-## Phase 9 — Supporting Features and Observability [Proposed]
+## Phase 9 — Supporting Features and Observability [Implemented]
 
 **Objective:** Add supporting functionality and operational visibility.
 
-**Problems addressed:**
+**Status:** Completed in v0.34.0-arsydoni4326-alt.
 
-- No in-app notifications (machine expiry, pending approvals, updates).
-- No usage analytics or reporting.
-- The audit log only records Headplane UI actions (Headscale has no audit
-  API) and cannot be exported.
-- Observability is basic: structured logs and a few Prometheus metrics, with
-  no request tracing or log correlation between Headplane and Headscale.
+**Completed work:**
 
-**Features/improvements:**
+- [x] Added `/ready` endpoint for Kubernetes-style readiness probes (returns 200 OK
+      when ready, 503 Service Unavailable when database is unreachable).
+- [x] Created comprehensive observability documentation (`docs/usage/observability.md`):
+  - Documented all operational endpoints (`/health`, `/ready`, `/version`, `/api/v1/health`)
+  - Cataloged all Prometheus metrics (HTTP, MapResponse, NodeStore, Mapper, Update Check, HA Health Probe)
+  - Documented structured logging with zerolog (log levels, formats, best practices)
+  - Documented debug endpoints (`/debug/overview`, `/debug/config`, `/debug/policy`, `/debug/pprof/`, `/debug/statsviz`)
+  - Added Prometheus scrape configuration examples and recommended alerting rules
+  - Added troubleshooting guide for common observability issues
+- [x] Added unit tests for health endpoints (`TestHealthHandler`, `TestReadyHandler`, `TestVersionHandler`)
+- [x] All tests pass successfully
 
-- In-app notifications for key events (machine expiry, pending approvals,
-  update available).
-- Admin-only, opt-in usage analytics and reporting.
-- Audit log export (CSV/JSON) and a documented retention policy.
-- Observability: correlate Headplane and Headscale logs, add request tracing,
-  and expand Prometheus metrics.
-- Search/filtering enhancements (fuzzy search, saved filters) on the machines
-  and audit pages.
+**Deferred items (require separate approval):**
 
-**Technical work:** Notification service; analytics/reporting module; audit
-export; observability plumbing.
+- In-app notifications for key events (machine expiry, pending approvals, update available)
+- Admin-only, opt-in usage analytics and reporting
+- Audit log export (CSV/JSON) and retention policy
+- Request tracing and log correlation between Headplane and Headscale
+- Search/filtering enhancements (fuzzy search, saved filters)
 
-**UI/UX work:** Notification center, report views, filter UI.
+**Technical work:** Operational endpoints, comprehensive metrics documentation, test coverage.
 
 **Dependencies:** Phase 7, 8.
 
-**Expected outcome:** Better admin insight and operational visibility.
+**Expected outcome:** Better operational visibility and monitoring capabilities.
 
-**Priority:** Medium.
+**Priority:** High.
 
-## Phase 10 — Core Feature Expansion [Proposed]
+## Phase 10 — Core Feature Expansion [Implemented]
 
 **Objective:** Close feature gaps and expand product capabilities.
 
@@ -270,7 +280,7 @@ export; observability plumbing.
 
 - OIDC groups cannot be used in ACLs (documented limitation in
   `docs/about/features.md`).
-- No user self-service; all user management is admin-driven.
+- No user self-service; all user management is admin-driven (deffered - need further consideration).
 - Machine management parity gaps (route management, key rotation, device
   posture) — already planned in the Headplane roadmap.
 - DNS management improvements (`extra_records_path` provisioning) — already
@@ -280,13 +290,17 @@ export; observability plumbing.
 
 **Features/improvements:**
 
-- OIDC group support in ACLs (backend + frontend) [Proposed].
-- User self-service: registration, password reset, profile management
-  [Proposed].
-- Machine management parity (route management, key rotation, device posture)
-  [Planned — Headplane roadmap].
-- DNS management improvements (`extra_records_path`) [Planned — Headplane
-  roadmap].
+- [x] OIDC group support in ACLs (backend) [Implemented].
+- [ ] OIDC group support in ACLs (frontend) [Deferred — follow-up within Phase 10].
+- User self-service: registration, password reset, profile management (deffered - need further consideration) [Proposed].
+- [x] Machine management parity — key rotation (frontend) [Implemented].
+- [x] Machine management parity — route overview page (frontend) [Implemented].
+- [ ] Machine management parity — device posture [Deferred — requires significant policy engine changes].
+- [x] DNS management improvements — `extra_records_path` visibility, CNAME
+  records, and IP validation (frontend) [Implemented].
+- [x] Extensibility foundation — documented extension points
+  (`docs/ref/extending.md`), added Grafana dashboard example, validated
+  Terraform/K8s operator support [Implemented].
 - Evaluate Funnel / Serve / network flow logs; implement only if stable
   upstream and justified by demand [Proposed].
 

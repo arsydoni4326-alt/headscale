@@ -48,9 +48,93 @@ keys remain all-access.
 - Headscale now requires Go 1.27 to build
 
 # Next
+- **Phase 10: Core Feature Expansion (IN PROGRESS)**:
+  - **Part 1: OIDC Group Support in ACLs**:
+    - Added `oidc_groups` column to the `users` table to store OIDC group
+      memberships from the identity provider's `groups` claim.
+    - OIDC groups are refreshed on every OIDC login via `User.FromClaim`.
+    - Policy engine now resolves OIDC groups in ACLs, grants, `tagOwners`,
+      and `autoApprovers` without requiring them to be defined in the policy
+      file. Policy-defined groups take precedence over OIDC groups.
+    - Added `Groups.ContainsOrOIDC` and `Policy.validateWithUsers` to validate
+      OIDC group references against the live user list.
+    - Exposed `oidcGroups` in the v1 and v2 user API responses.
+    - Added unit tests covering OIDC groups in ACL sources/destinations,
+      tag owners, auto-approvers, undefined-group rejection, and
+      policy-defined precedence.
+    - Updated documentation: `docs/about/features.md`, `docs/ref/oidc.md`,
+      `docs/ref/policy.md`.
+    - Renamed `UpdateCheckResponse` to `UpdateCheckResult` in the
+      `hscontrol/updatecheck/` package to resolve an oapi-codegen type
+      collision exposed when regenerating the API clients. The JSON wire
+      format is unchanged.
+  - **Part 2: Machine Management Parity**:
+    - **Key rotation**: Added a "Rotate key" action to the Headplane machine
+      menu. It invalidates the machine's node key via the existing expire
+      API, forcing the device to re-authenticate. Records a
+      `machine.rotate_key` audit entry.
+    - **Route overview**: Added a `/routes` page in Headplane that aggregates
+      all subnet routes and exit nodes across every machine, shows
+      approved/pending status, and allows approving or disabling routes
+      directly from the overview.
+    - Device posture remains a documented limitation (requires significant
+      policy engine changes).
+  - **Part 3: DNS Management Improvements**:
+    - The Headplane DNS page now shows a notice when `dns.extra_records_path`
+      is configured, indicating that DNS records are managed via the JSON
+      file and changes are picked up automatically.
+    - Added CNAME record support to the DNS record dialog (A, AAAA, and
+      CNAME are now offered).
+    - Added IP address validation for A (IPv4) and AAAA (IPv6) records with
+      inline error messages.
+    - Added unit tests for DNS record value validation.
+  - **Part 4: Extensibility Foundation**:
+    - Created `docs/ref/extending.md` documenting the extension points:
+      v1/v2 REST APIs, OAuth client-credentials for external tools, policy
+      engine, Headplane, and monitoring/alerting integrations.
+    - Added a Grafana dashboard JSON example to
+      `docs/usage/observability.md` visualising key Headscale metrics.
+    - Validated the Terraform provider / Kubernetes operator support via the
+      existing servertest suite (`TestAPIv2`, `TestAPIv2OAuthScopes`).
+    - Added "Extending Headscale" to the docs navigation.
 
 ### Changes
 
+- **Phase 9: Supporting Features and Observability (COMPLETED)**:
+  - Added `/ready` endpoint for Kubernetes-style readiness probes. Returns 200 OK
+    when ready, 503 Service Unavailable when database is unreachable. JSON response
+    includes `ready` boolean and `status` string.
+  - Created comprehensive observability documentation at `docs/usage/observability.md`:
+    - Documented all operational endpoints (`/health`, `/ready`, `/version`, `/api/v1/health`)
+    - Cataloged all Prometheus metrics with types, descriptions, and labels:
+      HTTP metrics, MapResponse metrics, NodeStore metrics, Mapper metrics,
+      Update Check metrics, and HA Health Probe metrics
+    - Documented structured logging with zerolog (log levels, formats, best practices)
+    - Documented debug endpoints (`/debug/overview`, `/debug/config`, `/debug/policy`,
+      `/debug/pprof/`, `/debug/statsviz`)
+    - Added Prometheus scrape configuration examples and recommended alerting rules
+    - Added troubleshooting guide for common observability issues
+  - Added unit tests: `TestHealthHandler`, `TestReadyHandler`, `TestVersionHandler`
+  - All tests pass successfully
+- **Phase 8: UI/UX and Accessibility Refinement (COMPLETED)**:
+  - Created standardized UI state components: `EmptyState` (with `default`, 
+    `filtered`, and `error` variants) and `LoadingSpinner` (with accessible 
+    ARIA attributes).
+  - Refactored all data-displaying routes to use standardized components:
+    - machines, users, audit, derp, topology, and auth-keys all use `EmptyState`
+    - Configuration routes (ACLs, DNS, settings) use appropriate patterns for 
+      their editor-based UIs
+  - Verified all 25 dialogs use standardized `Dialog` + `DialogPanel` pattern
+    with proper variants (`destructive`, `normal`, `unactionable`)
+  - Confirmed tooltip component is in use on 12+ UI elements providing 
+    contextual help
+  - All component tests pass (51/51) and typecheck passes with no errors
+  - Documentation: Added comprehensive accessibility section to
+    `docs/usage/ui-guide.md` covering keyboard navigation, screen reader
+    support, visual accessibility, forms and validation, testing, known
+    limitations, and reporting process.
+  - Updated ROADMAP.md: Phase 8 status changed to [Implemented].
+  - Updated maintenance checklist to include accessibility verification.
 - **Phase 7: Testing and Technical Hardening**:
   - Backend: Wired `DisableUpdateCheck` into the fork's update-check endpoint.
     When `disable_check_updates: true` is set, the endpoint skips the remote

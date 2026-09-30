@@ -43,6 +43,7 @@ type User struct {
 	DeviceCount        int       `json:"deviceCount"`
 	LastSeen           time.Time `json:"lastSeen"`
 	CurrentlyConnected bool      `json:"currentlyConnected"`
+	OIDCGroups         []string  `json:"oidcGroups,omitempty"`
 }
 
 type (
@@ -157,6 +158,7 @@ func userFromView(b Backend, view types.UserView) User {
 		Type:          userTypeMember,
 		Role:          userRoleMember,
 		Status:        userStatusActive,
+		OIDCGroups:    view.OIDCGroups().AsSlice(),
 	}
 
 	nodes := b.State.ListNodesByUser(types.UserID(view.ID()))

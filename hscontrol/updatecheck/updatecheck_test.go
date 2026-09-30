@@ -36,7 +36,7 @@ func TestHandler_WithoutCheckParam(t *testing.T) {
 		t.Fatalf("expected Content-Type application/json, got %s", contentType)
 	}
 
-	var body UpdateCheckResponse
+	var body UpdateCheckResult
 
 	err := json.NewDecoder(resp.Body).Decode(&body)
 	if err != nil {
@@ -85,7 +85,7 @@ func TestHandler_WithCheckParam(t *testing.T) {
 		t.Fatalf("expected status 200, got %d", resp.StatusCode)
 	}
 
-	var body UpdateCheckResponse
+	var body UpdateCheckResult
 
 	err := json.NewDecoder(resp.Body).Decode(&body)
 	if err != nil {
@@ -503,7 +503,7 @@ func TestBuildResponse_DevVersion(t *testing.T) {
 
 func TestBuildResponse_RemoteVersionResponseHasVersion(t *testing.T) {
 	// Verify that RemoteVersionResponse includes the Version field in JSON.
-	resp := UpdateCheckResponse{
+	resp := UpdateCheckResult{
 		Current:         CurrentVersionResponse{Version: "0.29.9", Commit: "abc1234", BuildTime: "2026-01-01", Dirty: false},
 		UpdateAvailable: func() *bool { v := false; return &v }(),
 		Remote: &RemoteVersionResponse{
@@ -784,7 +784,7 @@ func TestTryReleaseComparison_InvalidRemoteTag(t *testing.T) {
 		t.Fatalf("parseVersion: %v", err)
 	}
 
-	resp := tryReleaseComparison(UpdateCheckResponse{}, localVer)
+	resp := tryReleaseComparison(UpdateCheckResult{}, localVer)
 
 	if resp.Remote != nil {
 		t.Error("expected Remote to be nil (fallback to commit comparison)")
@@ -810,7 +810,7 @@ func TestTryReleaseComparison_Success(t *testing.T) {
 		t.Fatalf("parseVersion: %v", err)
 	}
 
-	resp := tryReleaseComparison(UpdateCheckResponse{}, localVer)
+	resp := tryReleaseComparison(UpdateCheckResult{}, localVer)
 
 	if resp.Remote == nil {
 		t.Fatal("expected Remote to be set")
@@ -835,7 +835,7 @@ func TestTryCommitComparison_Success(t *testing.T) {
 		_, _ = w.Write([]byte(`{"sha": "abcdef1234567890"}`))
 	})
 
-	resp := tryCommitComparison(UpdateCheckResponse{}, "1111111")
+	resp := tryCommitComparison(UpdateCheckResult{}, "1111111")
 
 	if resp.Remote == nil {
 		t.Fatal("expected Remote to be set")
@@ -860,7 +860,7 @@ func TestTryCommitComparison_NoUpdate(t *testing.T) {
 		_, _ = w.Write([]byte(`{"sha": "abcdef1234567890"}`))
 	})
 
-	resp := tryCommitComparison(UpdateCheckResponse{}, "abcdef1234567890")
+	resp := tryCommitComparison(UpdateCheckResult{}, "abcdef1234567890")
 
 	if resp.UpdateAvailable == nil || *resp.UpdateAvailable {
 		t.Error("expected updateAvailable=false (same commit)")
@@ -876,7 +876,7 @@ func TestTryCommitComparison_Error(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	})
 
-	resp := tryCommitComparison(UpdateCheckResponse{}, "1111111")
+	resp := tryCommitComparison(UpdateCheckResult{}, "1111111")
 
 	if resp.Error == "" {
 		t.Error("expected error to be set")

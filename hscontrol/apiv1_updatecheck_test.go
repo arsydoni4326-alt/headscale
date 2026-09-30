@@ -61,5 +61,5 @@ func TestAPIV1UpdateCheckInSpec(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Contains(t, string(spec), "/api/v1/update-check")
-	assert.Contains(t, string(spec), "UpdateCheckResponse")
+	assert.Contains(t, string(spec), "UpdateCheckResult")
 }
