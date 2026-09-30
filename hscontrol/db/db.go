@@ -953,6 +953,18 @@ WHERE tags IS NOT NULL AND tags != '[]' AND tags != '' AND tags != 'null'
 				},
 				Rollback: func(db *gorm.DB) error { return nil },
 			},
+			{
+				// Add webhooks table for monitoring/alerting integrations.
+				// Webhooks can be configured to receive HTTP POST notifications
+				// for events like node up/down, health check failures, and alerts.
+				ID: "202609301000-create-webhooks-table",
+				Migrate: func(tx *gorm.DB) error {
+					return tx.AutoMigrate(&types.Webhook{})
+				},
+				Rollback: func(tx *gorm.DB) error {
+					return tx.Migrator().DropTable(&types.Webhook{})
+				},
+			},
 		},
 	)
 
@@ -966,6 +978,7 @@ WHERE tags IS NOT NULL AND tags != '[]' AND tags != '' AND tags != 'null'
 			&types.Policy{},
 			&types.OAuthClient{},
 			&types.OAuthAccessToken{},
+			&types.Webhook{},
 		)
 		if err != nil {
 			return err
