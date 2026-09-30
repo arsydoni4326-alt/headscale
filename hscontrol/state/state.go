@@ -1470,6 +1470,36 @@ func (s *State) DestroyAPIKey(key types.APIKey) error {
 	return s.db.DestroyAPIKey(key)
 }
 
+// CreateWebhook creates a new webhook configuration.
+func (s *State) CreateWebhook(webhook *types.Webhook) error {
+	return s.db.CreateWebhook(webhook)
+}
+
+// GetWebhook retrieves a webhook by ID.
+func (s *State) GetWebhook(id uint) (*types.Webhook, error) {
+	return s.db.GetWebhook(id)
+}
+
+// ListWebhooks returns all webhook configurations.
+func (s *State) ListWebhooks() ([]*types.Webhook, error) {
+	return s.db.ListWebhooks()
+}
+
+// ListWebhooksForEvent returns all enabled webhooks that listen to a specific event.
+func (s *State) ListWebhooksForEvent(eventType types.WebhookEventType) ([]*types.Webhook, error) {
+	return s.db.ListWebhooksForEvent(eventType)
+}
+
+// UpdateWebhook updates an existing webhook configuration.
+func (s *State) UpdateWebhook(webhook *types.Webhook) error {
+	return s.db.UpdateWebhook(webhook)
+}
+
+// DeleteWebhook deletes a webhook by ID.
+func (s *State) DeleteWebhook(id uint) error {
+	return s.db.DeleteWebhook(id)
+}
+
 // CreatePreAuthKey generates a new pre-authentication key for a user.
 // The userID parameter is now optional (can be nil) for system-created tagged keys.
 func (s *State) CreatePreAuthKey(userID *types.UserID, reusable bool, ephemeral bool, expiration *time.Time, aclTags []string) (*types.PreAuthKeyNew, error) {

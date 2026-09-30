@@ -510,4 +510,5 @@ datasource UID to match your Grafana setup.
 
 - [Configuration Reference](../ref/configuration.md)
 - [Debug Endpoints](../ref/debug.md)
+- [Webhooks](webhooks.md) - Webhook notifications for monitoring and alerting
 - [Getting Started](getting-started.md)
