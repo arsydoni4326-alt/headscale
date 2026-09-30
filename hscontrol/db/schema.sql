@@ -12,6 +12,7 @@ CREATE TABLE users(
   provider_identifier text,
   provider text,
   profile_pic_url text,
+  oidc_groups text,
 
   created_at datetime,
   updated_at datetime,

@@ -17,7 +17,7 @@ type updateCheckInput struct {
 }
 
 type updateCheckOutput struct {
-	Body updatecheck.UpdateCheckResponse
+	Body updatecheck.UpdateCheckResult
 }
 
 func init() {

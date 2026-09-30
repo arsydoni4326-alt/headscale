@@ -48,9 +48,9 @@ harden what exists today before expanding into new territory.
 
 ### Current state
 
-- Phases 1-9 are complete. Latest fork releases: Headscale
+- Phases 1-10 are complete. Latest fork releases: Headscale
   `v0.34.0-arsydoni4326-alt`, Headplane `v0.8.3-arsydoni4326-alt`.
-- Phases 10+ below are **proposed** and must not be implemented without
+- Phase 11 below is **proposed** and must not be implemented without
   explicit approval.
 
 ## Phase 1 — Foundation and Documentation (Completed)
@@ -272,7 +272,7 @@ help/onboarding content.
 
 **Priority:** High.
 
-## Phase 10 — Core Feature Expansion [Proposed]
+## Phase 10 — Core Feature Expansion [Implemented]
 
 **Objective:** Close feature gaps and expand product capabilities.
 
@@ -290,12 +290,17 @@ help/onboarding content.
 
 **Features/improvements:**
 
-- OIDC group support in ACLs (backend + frontend) [Proposed].
+- [x] OIDC group support in ACLs (backend) [Implemented].
+- [ ] OIDC group support in ACLs (frontend) [Deferred — follow-up within Phase 10].
 - User self-service: registration, password reset, profile management (deffered - need further consideration) [Proposed].
-- Machine management parity (route management, key rotation, device posture)
-  [Planned — Headplane roadmap].
-- DNS management improvements (`extra_records_path`) [Planned — Headplane
-  roadmap].
+- [x] Machine management parity — key rotation (frontend) [Implemented].
+- [x] Machine management parity — route overview page (frontend) [Implemented].
+- [ ] Machine management parity — device posture [Deferred — requires significant policy engine changes].
+- [x] DNS management improvements — `extra_records_path` visibility, CNAME
+  records, and IP validation (frontend) [Implemented].
+- [x] Extensibility foundation — documented extension points
+  (`docs/ref/extending.md`), added Grafana dashboard example, validated
+  Terraform/K8s operator support [Implemented].
 - Evaluate Funnel / Serve / network flow logs; implement only if stable
   upstream and justified by demand [Proposed].
 

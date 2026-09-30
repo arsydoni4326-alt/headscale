@@ -226,9 +226,16 @@ AND auth_key_id NOT IN (
 					}
 
 					for _, user := range users {
-						user.ProviderIdentifier.String = types.CleanIdentifier(user.ProviderIdentifier.String)
+						cleaned := types.CleanIdentifier(user.ProviderIdentifier.String)
 
-						err := tx.Save(user).Error
+						// Update only the provider_identifier column. Using
+						// Save() would write every field on the struct, which
+						// breaks when later migrations add new columns (e.g.
+						// oidc_groups) that do not exist yet at this point in
+						// the migration chain.
+						err := tx.Model(&types.User{}).
+							Where("id = ?", user.ID).
+							Update("provider_identifier", cleaned).Error
 						if err != nil {
 							return fmt.Errorf("saving user: %w", err)
 						}
@@ -921,6 +928,25 @@ WHERE tags IS NOT NULL AND tags != '[]' AND tags != '' AND tags != 'null'
 						`).Error
 					if err != nil {
 						return fmt.Errorf("clearing expiry on tagged nodes: %w", err)
+					}
+
+					return nil
+				},
+				Rollback: func(db *gorm.DB) error { return nil },
+			},
+			{
+				// Add oidc_groups column to users table to store OIDC group
+				// memberships. Groups are fetched from the OIDC provider's
+				// 'groups' claim during authentication and can be referenced
+				// in ACL policies for group-based access control.
+				// This enables parity with Tailscale's OIDC group support.
+				ID: "202609291402-add-oidc-groups-to-users",
+				Migrate: func(tx *gorm.DB) error {
+					if !tx.Migrator().HasColumn(&types.User{}, "OIDCGroups") {
+						err := tx.Migrator().AddColumn(&types.User{}, "OIDCGroups")
+						if err != nil {
+							return fmt.Errorf("adding oidc_groups to users: %w", err)
+						}
 					}
 
 					return nil

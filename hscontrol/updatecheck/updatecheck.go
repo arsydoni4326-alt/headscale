@@ -95,8 +95,8 @@ type RemoteVersionResponse struct {
 	URL     string `json:"url"`
 }
 
-// UpdateCheckResponse is the full response from the update check endpoint.
-type UpdateCheckResponse struct {
+// UpdateCheckResult is the full response from the update check endpoint.
+type UpdateCheckResult struct {
 	Current         CurrentVersionResponse `json:"current"`
 	UpdateAvailable *bool                  `json:"updateAvailable,omitempty"`
 	Remote          *RemoteVersionResponse `json:"remote,omitempty"`
@@ -219,10 +219,10 @@ func releaseAPIURL() string {
 //
 // It is the single source of truth for the response shape, shared by the
 // http.HandlerFunc and the v1 API operation.
-func BuildResponse(check bool, disabled bool) UpdateCheckResponse {
+func BuildResponse(check bool, disabled bool) UpdateCheckResult {
 	versionInfo := types.GetVersionInfo()
 
-	resp := UpdateCheckResponse{
+	resp := UpdateCheckResult{
 		Current: CurrentVersionResponse{
 			Version:   versionInfo.Version,
 			Commit:    versionInfo.Commit,
@@ -258,7 +258,7 @@ func BuildResponse(check bool, disabled bool) UpdateCheckResponse {
 // tryReleaseComparison attempts to compare against the latest release tag.
 // Returns the response with Remote set on success, Error set on fetch failure,
 // or unmodified when no release exists.
-func tryReleaseComparison(resp UpdateCheckResponse, localVer semver) UpdateCheckResponse {
+func tryReleaseComparison(resp UpdateCheckResult, localVer semver) UpdateCheckResult {
 	remoteTag, err := fetchRemoteLatestRelease()
 	if err != nil {
 		log.Warn().
@@ -295,7 +295,7 @@ func tryReleaseComparison(resp UpdateCheckResponse, localVer semver) UpdateCheck
 }
 
 // tryCommitComparison compares against the latest commit on main.
-func tryCommitComparison(resp UpdateCheckResponse, localCommit string) UpdateCheckResponse {
+func tryCommitComparison(resp UpdateCheckResult, localCommit string) UpdateCheckResult {
 	remoteCommit, err := fetchRemoteShortCommit()
 	if err != nil {
 		log.Warn().

@@ -362,6 +362,113 @@ groups:
           summary: "Headscale is failing to send map responses"
 ```
 
+### Grafana Dashboard
+
+The following Grafana dashboard JSON visualises the key Headscale metrics.
+Import it in Grafana via **Dashboards → Import** and paste the JSON, or save it
+as a file and use the Grafana provisioning API.
+
+```json
+{
+  "title": "Headscale",
+  "uid": "headscale-overview",
+  "tags": ["headscale"],
+  "timezone": "browser",
+  "panels": [
+    {
+      "title": "HTTP Requests",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total[5m])) by (code)",
+          "legendFormat": "{{code}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" }
+      }
+    },
+    {
+      "title": "HTTP Request Duration (p95)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      }
+    },
+    {
+      "title": "Map Responses Sent",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(headscale_mapresponse_sent_total[5m])) by (status)",
+          "legendFormat": "{{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "ops" }
+      }
+    },
+    {
+      "title": "Connected Nodes",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "headscale_nodestore_nodes_total",
+          "legendFormat": "nodes"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short" }
+      }
+    },
+    {
+      "title": "NodeStore Operation Duration (p95)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(headscale_nodestore_operation_duration_seconds_bucket[5m])) by (le, operation))",
+          "legendFormat": "{{operation}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      }
+    },
+    {
+      "title": "Update Check Requests",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(headscale_updatecheck_requests_total[5m])) by (check)",
+          "legendFormat": "check={{check}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" }
+      }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "version": 1
+}
+```
+
+The dashboard assumes a Prometheus datasource with UID `prometheus`. Adjust the
+datasource UID to match your Grafana setup.
+
 ## Troubleshooting
 
 ### Metrics Not Available
