@@ -28,9 +28,9 @@ func TestAPIV1Derp(t *testing.T) {
 		require.True(t, ok, "expected configured field")
 		assert.False(t, configured)
 
-		totalRegions, ok := body["totalRegions"].(int)
+		totalRegions, ok := body["totalRegions"].(float64)
 		require.True(t, ok, "expected totalRegions field")
-		assert.Equal(t, 0, totalRegions)
+		assert.Equal(t, float64(0), totalRegions)
 	})
 
 	t.Run("configured derp map", func(t *testing.T) {
@@ -63,28 +63,30 @@ func TestAPIV1Derp(t *testing.T) {
 		require.True(t, ok, "expected configured field")
 		assert.True(t, configured)
 
-		totalRegions, ok := body["totalRegions"].(int)
+		totalRegions, ok := body["totalRegions"].(float64)
 		require.True(t, ok, "expected totalRegions field")
-		assert.Equal(t, 1, totalRegions)
+		assert.Equal(t, float64(1), totalRegions)
 
-		regions, ok := body["regions"].([]map[string]any)
+		regions, ok := body["regions"].([]any)
 		require.True(t, ok, "expected regions array")
 		require.Len(t, regions, 1)
 
-		region := regions[0]
-		assert.Equal(t, 900, region["regionId"])
+		region, ok := regions[0].(map[string]any)
+		require.True(t, ok, "expected region object")
+		assert.Equal(t, float64(900), region["regionId"])
 		assert.Equal(t, "test", region["regionCode"])
 		assert.Equal(t, "Test Region", region["regionName"])
 
-		nodes, ok := region["nodes"].([]map[string]any)
+		nodes, ok := region["nodes"].([]any)
 		require.True(t, ok, "expected nodes array")
 		require.Len(t, nodes, 1)
 
-		node := nodes[0]
+		node, ok := nodes[0].(map[string]any)
+		require.True(t, ok, "expected node object")
 		assert.Equal(t, "test0", node["name"])
 		assert.Equal(t, "127.0.0.1", node["hostName"])
-		assert.Equal(t, 8766, node["derpPort"])
-		assert.Equal(t, 3478, node["stunPort"])
+		assert.Equal(t, float64(8766), node["derpPort"])
+		assert.Equal(t, float64(3478), node["stunPort"])
 		assert.Equal(t, "127.0.0.1", node["ipv4"])
 	})
 }

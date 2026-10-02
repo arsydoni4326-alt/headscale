@@ -4,6 +4,35 @@
 
 **Minimum supported Tailscale client version: v1.82.0**
 
+### Machine approval REST API (Phase 12, backend)
+
+Added single and bulk machine-approval endpoints so pending machines can be
+approved without the CLI:
+
+- **Single approval** — `POST /api/v1/machines/{id}/approve` approves one
+  machine and returns its full record.
+- **Bulk approval** — `POST /api/v1/machines/approve` approves several machines
+  from a `nodeIds` array, reporting per-node success/failure. The batch is
+  non-atomic: one failure does not affect the others.
+- **RBAC** — the v1 auth middleware now distinguishes an all-access admin API
+  key from a scope-limited OAuth access token. Approval requires admin rights or
+  the `devices:core` OAuth scope; a read-only token is rejected with `403`. The
+  required scope is emitted in the OpenAPI document as `x-required-scope`.
+- **Audit logging** — each approval emits a structured log entry (action
+  `machine_approve` or `machine_approve_bulk`).
+- **Documentation** — `docs/ref/api.md`, the emitted OpenAPI document, and unit
+  tests covering single, bulk, partial-failure, and RBAC paths.
+
+Approving a machine clears its key expiry (Headscale treats a machine as
+authorized when it is not expired).
+
+Also fixed a pre-existing schema-validation failure that broke every SQLite
+test: `hscontrol/db/schema.sql` was missing the Phase 11 `webhooks` table, and
+the webhook migration used `AutoMigrate` (whose backticked index DDL never
+matched the schema file). The table now uses explicit per-dialect DDL
+(`hscontrol/db/migrate_webhooks.go`) and is recorded in `schema.sql`. A latent
+`TestAPIV1Derp` JSON type-assertion bug surfaced by the fix was corrected.
+
 ### Monitoring/Alerting Webhooks (Phase 11, Task 3)
 
 Added webhook support for monitoring and alerting integrations:
