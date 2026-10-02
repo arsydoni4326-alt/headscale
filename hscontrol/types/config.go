@@ -105,6 +105,13 @@ type NodeConfig struct {
 	Routes RouteConfig
 }
 
+// HeadplaneConfig contains Headplane-specific configuration.
+type HeadplaneConfig struct {
+	// Password is the password for Headplane web UI authentication.
+	// Can be overridden by HEADSCALE_HEADPLANE_PASSWORD environment variable.
+	Password string `json:"-"` // never serialise the Headplane password
+}
+
 // Config contains the initial Headscale configuration.
 type Config struct {
 	ServerURL           string
@@ -153,6 +160,8 @@ type Config struct {
 	Policy PolicyConfig
 
 	Tuning Tuning
+
+	Headplane HeadplaneConfig
 }
 
 type DNSConfig struct {
@@ -494,6 +503,8 @@ func LoadConfig(path string, isFile bool) error {
 	viper.SetDefault("tuning.node_store_batch_timeout", "500ms")
 
 	viper.SetDefault("prefixes.allocation", string(IPAllocationStrategySequential))
+
+	viper.SetDefault("headplane.password", "")
 
 	err := viper.ReadInConfig()
 	if err != nil {
@@ -1484,6 +1495,10 @@ func LoadServerConfig() (*Config, error) {
 			RegisterCacheMaxEntries: viper.GetInt("tuning.register_cache_max_entries"),
 			NodeStoreBatchSize:      viper.GetInt("tuning.node_store_batch_size"),
 			NodeStoreBatchTimeout:   viper.GetDuration("tuning.node_store_batch_timeout"),
+		},
+
+		Headplane: HeadplaneConfig{
+			Password: viper.GetString("headplane.password"),
 		},
 	}, nil
 }
