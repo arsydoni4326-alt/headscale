@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document archives the parallel implementation tasks for Phase 13. All tasks have been completed and merged into main.
+This document archives the parallel implementation tasks for Phase 13. All three tasks have been completed and merged into main.
 
 ---
 
@@ -69,23 +69,37 @@ Update all relevant documentation to cover password-based login for Headplane, i
 **Agent:** Frontend Login UI  
 **Worktree:** `/home/denny/Project/headscale-password-frontend`  
 **Branch:** `feature/password-frontend`  
-**Status:** Pending merge
+**Status:** ✅ Complete
 
 ### Objective
 Update Headplane login form to support password-based authentication alongside the existing API key method.
 
----
+### Completed Implementation
+- Password/API Key toggle in login form (password is default)
+- Password field with show/hide toggle
+- Backend API integration (`POST /api/v1/headplane/login`)
+- Session token management
+- Error handling (401 invalid, 429 rate limit, 503 not configured)
+- Comprehensive unit and E2E tests
+- Preserved API key login functionality
 
-## Roadmap Reference
-
-See `ROADMAP.md` Phase 13 for complete requirements and acceptance criteria.
+### Files Changed (in headplane submodule)
+- `headplane/app/server/headscale/api/transport.ts`
+- `headplane/app/server/headscale/api/index.ts`
+- `headplane/app/server/web/auth.ts`
+- `headplane/app/server/db/schema.ts`
+- `headplane/app/routes/auth/login/action.ts`
+- `headplane/app/routes/auth/login/page.tsx`
+- `headplane/tests/unit/auth/auth-service.test.ts`
+- `headplane/tests/unit/auth/password-login-action.test.ts` (new)
+- `headplane/tests/e2e/login.spec.ts`
 
 ---
 
 ## Security Considerations
 
 - Password transmitted over HTTPS only (secure cookies)
-- Rate limiting prevents brute-force attacks
+- Rate limiting prevents brute-force attacks (5 attempts per minute per IP)
 - Constant-time password comparison prevents timing attacks
 - Session tokens: 256-bit random, 24-hour expiry
 - Automatic session cleanup (5-minute interval)
@@ -102,9 +116,18 @@ See `ROADMAP.md` Phase 13 for complete requirements and acceptance criteria.
 
 ---
 
-## Notes
+## Integration Status
 
-This is a coordination document for Phase 13 parallel implementation. For current documentation, see:
+All three branches merged into `main` successfully:
+1. Backend (feature/password-backend)
+2. Docs (feature/password-docs)
+3. Frontend (feature/password-frontend)
+
+---
+
+## References
+
 - Backend: `hscontrol/headplane_auth.go`
 - Documentation: `docs/usage/authentication.md`
-- Frontend: Headplane submodule
+- Frontend: See `PASSWORD_LOGIN_SUMMARY.md`
+- Roadmap: `ROADMAP.md` Phase 13
