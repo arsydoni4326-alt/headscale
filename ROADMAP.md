@@ -430,6 +430,80 @@ UI.
 
 **Priority:** High.
 
+## Phase 13 — Simple Password Login for Headplane [Planned]
+
+**Objective:** Provide an alternative, simpler authentication method for
+Headplane users that does not require remembering complex API keys, while
+maintaining backward compatibility and avoiding database schema changes.
+
+**Problems addressed:**
+
+- Logging into Headplane currently requires a complex, auto-generated API key
+  from Headscale that is difficult for users to remember and manage.
+- Users need a more user-friendly authentication method for day-to-day access
+  to the Headplane web interface.
+- The current API key method, while secure and appropriate for programmatic
+  access, creates friction for human users accessing the web UI.
+
+**Features/improvements:**
+
+- [ ] Password-based login for Headplane alongside the existing API key method
+      [Planned].
+- [ ] Default password (configurable via config file or environment variable)
+      that can be changed by administrators [Planned].
+- [ ] Authentication restricted to Headplane integration only — does not grant
+      general API access like API keys do [Planned].
+- [ ] No database schema changes required; password stored in configuration,
+      environment, or in-memory [Planned].
+- [ ] Existing API key creation and authentication method remains fully
+      functional and unchanged [Planned].
+- [ ] Password change capability via configuration update or management command
+      [Planned].
+
+**Technical work:**
+
+- Implement password-based authentication endpoint or extend existing
+  authentication to accept simple password for Headplane.
+- Store password in configuration file (e.g., `config.yaml`) or environment
+  variable (e.g., `HEADSCALE_HEADPLANE_PASSWORD`).
+- Add authentication middleware to validate the simple password specifically for
+  Headplane requests.
+- Ensure the authentication method is clearly scoped to Headplane and does not
+  grant broader API access.
+- Document configuration options and security considerations.
+- Add unit tests for the new authentication method.
+- Update Headscale API documentation to clarify the difference between API keys
+  (programmatic access) and Headplane password (web UI access).
+
+**UI/UX work:**
+
+- Update Headplane login form to support password-based authentication alongside
+  API key input.
+- Add settings page or configuration UI to allow administrators to change the
+  Headplane password.
+- Display clear messaging about which authentication method is being used.
+- Document the login process and password management for end users.
+
+**Dependencies:** None (can be implemented independently of other phases).
+
+**Expected outcome:** Headplane users can log in with a simple, memorable
+password configured by the administrator, reducing friction for web UI access
+while maintaining the existing API key method for programmatic access. No
+database migrations or schema changes are required, ensuring full backward
+compatibility.
+
+**Priority:** Medium-High (user experience improvement).
+
+**Security considerations:**
+
+- The default password should be documented as a starting point that must be
+  changed in production deployments.
+- Password should be transmitted securely (HTTPS required for production use).
+- Consider rate limiting for password authentication to prevent brute-force
+  attacks.
+- The simple password method should be clearly documented as appropriate for
+  Headplane web UI access only, not for API automation or scripting.
+
 ## Tracking
 
 - Day-to-day work is tracked via GitHub issues on the fork repositories.
