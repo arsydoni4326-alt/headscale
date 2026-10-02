@@ -28,6 +28,11 @@ import (
 //go:embed schema.sql
 var dbSchema string
 
+// sqliteDialect is the dialector name gorm reports via DB.Name() for SQLite.
+// Compared to select dialect-specific DDL (SQLite is the schema source of
+// truth; other dialects mirror it).
+const sqliteDialect = "sqlite"
+
 func init() {
 	schema.RegisterSerializer("text", TextSerialiser{})
 }
@@ -752,7 +757,7 @@ WHERE tags IS NOT NULL AND tags != '[]' AND tags != '' AND tags != 'null'
 			// for events like node up/down, health check failures, and alerts.
 			ID: "202609301000-create-webhooks-table",
 			Migrate: func(tx *gorm.DB) error {
-				return tx.AutoMigrate(&types.Webhook{})
+				return ensureWebhooksTable(tx)
 			},
 			Rollback: func(tx *gorm.DB) error {
 				return tx.Migrator().DropTable(&types.Webhook{})
@@ -775,7 +780,14 @@ WHERE tags IS NOT NULL AND tags != '[]' AND tags != '' AND tags != 'null'
 			return err
 		}
 
-		err = tx.AutoMigrate(&types.Node{}, &types.Policy{}, &types.Webhook{})
+		err = tx.AutoMigrate(&types.Node{}, &types.Policy{})
+		if err != nil {
+			return err
+		}
+
+		// Webhooks use explicit DDL so their indexes match schema.sql exactly;
+		// AutoMigrate would emit backticked index DDL that fails validation.
+		err = ensureWebhooksTable(tx)
 		if err != nil {
 			return err
 		}

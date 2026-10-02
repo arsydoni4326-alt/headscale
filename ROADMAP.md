@@ -52,6 +52,8 @@ harden what exists today before expanding into new territory.
   `v0.34.0-arsydoni4326-alt`, Headplane `v0.8.3-arsydoni4326-alt`.
 - Phase 11 below is **proposed** and must not be implemented without
   explicit approval.
+- Phase 12 is **partially implemented**: the backend approval API is done; the
+  Headplane frontend work is planned.
 
 ## Phase 1 — Foundation and Documentation (Completed)
 
@@ -389,6 +391,44 @@ current tasks require them.
 **Expected outcome:** Future-proofing and extensibility.
 
 **Priority:** Low / Deferred.
+
+## Phase 12 — Web-based Machine Approval [Partially implemented]
+
+**Objective:** Let administrators approve pending machines from the Headplane
+web UI, without the CLI, via single and bulk REST endpoints with RBAC and audit
+logging.
+
+**Problems addressed:**
+
+- Approving a pending machine required shell access to the Headscale CLI
+  (`headscale auth register` / route approval), which is impractical for
+  web-only operators.
+
+**Features/improvements:**
+
+- [x] Backend REST endpoints `POST /api/v1/machines/{id}/approve` (single) and
+      `POST /api/v1/machines/approve` (bulk) [Implemented].
+- [x] RBAC: admin API key (all-access) or OAuth access token with the
+      `devices:core` scope; read-only tokens are rejected with `403`
+      [Implemented].
+- [x] Audit logging for approvals (structured log entries; no backend audit
+      table exists) [Implemented].
+- [x] OpenAPI documentation, unit tests, and `docs/ref/api.md` coverage
+      [Implemented].
+- [ ] Headplane frontend: pending-machine list and one-click / bulk approve
+      actions [Planned].
+
+**Technical work:** v1 API handlers, v1 auth middleware RBAC extension,
+`hscontrol/db/schema.sql` webhooks-table fix (pre-existing blocker).
+
+**UI/UX work:** Headplane pending-approval page (pending).
+
+**Dependencies:** Phase 4 (audit log in Headplane), Phase 6 (bulk operations).
+
+**Expected outcome:** Pending machines can be approved end-to-end from the web
+UI.
+
+**Priority:** High.
 
 ## Tracking
 

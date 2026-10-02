@@ -201,6 +201,15 @@ const (
 	Component = "component"
 )
 
+// Audit fields for caller-attributed mutations (who did what to which
+// resource). Kept generic so every audit log entry shares one vocabulary.
+const (
+	AuditAction   = "action"
+	AuditActor    = "actor"
+	AuditResource = "resource"
+	Timestamp     = "timestamp"
+)
+
 // Debug environment variable fields.
 const (
 	DebugDeadlock              = "HEADSCALE_DEBUG_DEADLOCK"
