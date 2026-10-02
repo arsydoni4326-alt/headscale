@@ -63,6 +63,15 @@ and container to run Headscale.**
 
 Please have a look at the [`documentation`](https://headscale.net/stable/).
 
+### Authentication
+
+Headscale supports multiple authentication methods:
+
+- **Password Authentication** — Simple password-based login for Headplane web UI access
+- **API Keys** — Token-based authentication for programmatic API access and automation
+
+See the [Authentication Guide](https://headscale.net/stable/usage/authentication/) for complete setup instructions.
+
 For NixOS users, a module is available in [`nix/`](./nix/).
 
 ## Builds from `main`

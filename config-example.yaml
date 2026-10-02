@@ -471,6 +471,30 @@ taildrop:
 auto_update:
   enabled: false
 
+# Headplane web UI configuration
+headplane:
+  # Password for Headplane web UI login.
+  # This password grants access to the Headplane web interface only,
+  # not the Headscale API. For API access, use API keys.
+  #
+  # ⚠️  SECURITY WARNING:
+  # - Change this password before deploying to production
+  # - Use a strong, randomly generated password (minimum 16 characters)
+  # - Never commit passwords to version control
+  # - Use HTTPS in production to protect credentials in transit
+  #
+  # Can also be set via the HEADSCALE_HEADPLANE_PASSWORD environment variable,
+  # which takes precedence over this config file value.
+  #
+  # Authentication details:
+  # - Scope: Headplane web UI access only (not for API automation)
+  # - Rate limiting: 5 login attempts per minute per IP address
+  # - Session duration: 24 hours from login
+  # - API endpoint: POST /api/v1/headplane/login
+  #
+  # See https://headscale.net/stable/usage/authentication/ for details.
+  password: "change-this-secure-password-in-production"
+
 # Advanced performance tuning parameters.
 # The defaults are carefully chosen and should rarely need adjustment.
 # Only modify these if you have identified a specific performance issue.
