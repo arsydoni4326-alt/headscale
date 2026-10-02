@@ -115,3 +115,22 @@ CREATE TABLE database_versions(
   version text NOT NULL,
   updated_at datetime
 );
+
+-- Webhook configurations for monitoring/alerting integrations (Phase 11).
+-- Events and Headers are JSON-encoded text columns; Secret is optional and
+-- used to sign payloads with HMAC-SHA256.
+CREATE TABLE webhooks(
+  id integer PRIMARY KEY AUTOINCREMENT,
+  created_at datetime,
+  updated_at datetime,
+  deleted_at datetime,
+  name text NOT NULL,
+  url text NOT NULL,
+  events text NOT NULL,
+  headers text,
+  secret text,
+  enabled numeric NOT NULL DEFAULT true,
+  timeout_seconds integer NOT NULL DEFAULT 10
+);
+CREATE UNIQUE INDEX idx_webhooks_name ON webhooks(name);
+CREATE INDEX idx_webhooks_deleted_at ON webhooks(deleted_at);

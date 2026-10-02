@@ -6,25 +6,37 @@
 
 ### Web-based Machine Approval (Phase 12)
 
-Added web interface support for approving pending machines:
+Added web interface support for approving pending machines through API, UI, and documentation:
 
-- **Machine approval API** - REST endpoints for single and bulk machine approval
-  - `POST /api/v1/machines/{id}/approve` - Approve a single machine by ID
-  - `POST /api/v1/machines/approve` - Bulk approve multiple machines
-- **Headplane UI integration** - View and approve pending machines through the web interface
+- **Machine approval API** — REST endpoints for single and bulk machine approval
+  - `POST /api/v1/machines/{id}/approve` — Approve a single machine by ID and return its full record
+  - `POST /api/v1/machines/approve` — Bulk approve multiple machines from a `nodeIds` array, 
+    reporting per-node success/failure (non-atomic: one failure does not affect others)
+  - **RBAC** — v1 auth middleware distinguishes admin API keys from scope-limited OAuth tokens. 
+    Approval requires admin rights or the `devices:core` OAuth scope; read-only tokens are 
+    rejected with `403`. Required scope is emitted in OpenAPI as `x-required-scope`
+  - **Audit logging** — each approval emits structured log entries (actions: `machine_approve`, `machine_approve_bulk`)
+  - Approving a machine clears its key expiry (Headscale treats machines as authorized when not expired)
+- **Headplane UI integration** — View and approve pending machines through the web interface
   - Pending machines list with status badges and metadata
   - Single machine approval with user assignment confirmation
   - Bulk selection and approval workflow
   - Real-time status updates and error handling
-- **Documentation** - Comprehensive guides for API and UI workflows
-  - API reference with request/response schemas and curl examples
-  - Registration methods updated to include web-based approval
-  - UI guide with approval workflow, permissions, and troubleshooting
-- **Permissions** - API key-based authentication with machine management scopes
-- **Error handling** - Detailed error messages for common failure cases
+- **Documentation** — Comprehensive guides for API and UI workflows
+  - API reference (`docs/ref/api.md`) with request/response schemas, curl examples, and OpenAPI document
+  - Registration methods updated to include web-based approval (`docs/ref/registration.md`)
+  - UI guide (`docs/usage/ui-guide.md`) with approval workflow, permissions, and troubleshooting
+  - Unit tests covering single, bulk, partial-failure, and RBAC paths
+- **Error handling** — Detailed error messages for common failure cases
 
 This complements existing CLI (`headscale auth register`) and API-only approval methods,
 providing a streamlined workflow for administrators managing multiple machines.
+
+**Bug fix**: Fixed a pre-existing schema-validation failure that broke every SQLite test: 
+`hscontrol/db/schema.sql` was missing the Phase 11 `webhooks` table, and the webhook migration 
+used `AutoMigrate` (whose backticked index DDL never matched the schema file). The table now 
+uses explicit per-dialect DDL (`hscontrol/db/migrate_webhooks.go`) and is recorded in `schema.sql`. 
+A latent `TestAPIV1Derp` JSON type-assertion bug surfaced by the fix was also corrected.
 
 ### Monitoring/Alerting Webhooks (Phase 11, Task 3)
 

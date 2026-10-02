@@ -196,6 +196,42 @@ The response reports whether DERP is configured, the total region count, and
 each region's ID, name, code, and relay nodes (name, hostname, DERP/STUN
 ports, IPv4/IPv6). This powers the DERP status page in Headplane.
 
+### Machine approval
+
+Machines that have not yet been approved cannot join the tailnet. Two
+authenticated endpoints approve pending machines (see
+[Registration](./registration.md) for how a machine ends up pending):
+
+=== "Approve one machine"
+
+    ```console
+    curl -H "Authorization: Bearer <API_KEY>" \
+        --json '{"nodeId": "123"}' \
+        https://headscale.example.com/api/v1/machines/123/approve
+    ```
+
+    The response is `{"success": true, "node": {...}}`, with the approved
+    machine's full record.
+
+=== "Approve several machines"
+
+    ```console
+    curl -H "Authorization: Bearer <API_KEY>" \
+        --json '{"nodeIds": ["123", "456"]}' \
+        https://headscale.example.com/api/v1/machines/approve
+    ```
+
+    The response reports the outcome per node:
+    `{"success": true, "approved": ["123"], "failed": ["456"], "errors": {"456": "machine not found: 456"}, "results": [...]}`.
+    `success` is true when at least one machine was approved; the batch is not
+    atomic, so a failure for one machine does not affect the others.
+
+Both endpoints require write access to machines: an admin API key (all-access)
+or an OAuth access token holding the `devices:core` scope. A read-only token is
+rejected with `403`. Approving a machine clears its key expiry so it no longer
+reports as expired, and records an audit log entry (action `machine_approve` or
+`machine_approve_bulk`).
+
 ## Join nodes with an OAuth client
 
 Headscale also serves a subset of the Tailscale-compatible API at `/api/v2`, which

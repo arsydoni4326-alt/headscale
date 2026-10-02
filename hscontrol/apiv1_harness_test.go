@@ -77,6 +77,29 @@ func callHandler(handler http.Handler, method, path string, body []byte) httpRes
 	return httpResult{status: rec.Code, body: rec.Body.Bytes()}
 }
 
+// callHandlerAuth issues a request with an Authorization header and WITHOUT the
+// local-trust bypass, so the auth middleware runs. Used to exercise RBAC.
+func callHandlerAuth(handler http.Handler, method, path, authHeader string, body []byte) httpResult {
+	var reader io.Reader
+	if body != nil {
+		reader = bytes.NewReader(body)
+	}
+
+	req := httptest.NewRequestWithContext(context.Background(), method, path, reader)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	if authHeader != "" {
+		req.Header.Set("Authorization", authHeader)
+	}
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	return httpResult{status: rec.Code, body: rec.Body.Bytes()}
+}
+
 func (h *apiV1Harness) callHuma(method, path string, body []byte) httpResult {
 	return callHandler(h.huma, method, path, body)
 }
