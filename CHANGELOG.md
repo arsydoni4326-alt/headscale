@@ -1,5 +1,62 @@
 # CHANGELOG
 
+## 0.35.9-arsydoni4326-alt (2026-10-02)
+
+### Simple Password Login for Headplane (Phase 13)
+
+Added password-based authentication for Headplane web UI as an alternative to API key authentication:
+
+- **Backend Authentication** — Password authentication handler with session management
+  - `POST /api/v1/headplane/login` endpoint for password-based login
+  - Session tokens: 256-bit cryptographically random, 24-hour expiry
+  - Rate limiting: 5 login attempts per minute per IP address
+  - Constant-time password comparison to prevent timing attacks
+  - Automatic session cleanup every 5 minutes
+  - Configuration via `headplane.password` in `config.yaml` or `HEADSCALE_HEADPLANE_PASSWORD` environment variable
+  - Comprehensive unit tests covering success, failure, and rate limiting scenarios
+  
+- **Frontend UI** — Password login interface in Headplane
+  - Password/API Key toggle in login form (password is default)
+  - Password visibility toggle for improved UX
+  - Full error handling: invalid password (401), rate limiting (429), not configured (503)
+  - Session token management in secure HTTP-only cookies
+  - Unit and E2E tests for all login flows
+  - Complete backward compatibility with API key authentication
+  
+- **Documentation** — Comprehensive guides for setup and usage
+  - `docs/usage/authentication.md` — Complete authentication guide covering both password and API key methods
+  - `docs/troubleshooting.md` — Troubleshooting guide for authentication, configuration, and network issues
+  - `docs/ref/configuration.md` — Updated with password configuration reference and security best practices
+  - `config-example.yaml` — Added `headplane.password` field with inline documentation
+  - `README.md` — Updated with authentication overview
+  
+- **Security Features**:
+  - HTTPS required for production use (secure cookies)
+  - Rate limiting prevents brute-force attacks
+  - Constant-time password comparison prevents timing attacks
+  - Session tokens never logged or exposed
+  - Password never serialized in JSON output
+  
+- **Backward Compatibility**:
+  - No database migrations required
+  - API key authentication fully preserved and unchanged
+  - Password authentication is optional
+  - Existing deployments continue working without configuration changes
+
+This feature provides administrators with a simpler login method for Headplane web UI access while maintaining the existing API key method for programmatic access and automation.
+
+Files changed:
+- `hscontrol/headplane_auth.go` (new) — Authentication handler
+- `hscontrol/headplane_auth_test.go` (new) — Unit tests
+- `hscontrol/types/config.go` — Added HeadplaneConfig
+- `hscontrol/app.go` — Registered login endpoint
+- `config-example.yaml` — Password configuration
+- `docs/usage/authentication.md` (new) — Authentication guide
+- `docs/troubleshooting.md` (new) — Troubleshooting guide
+- `docs/ref/configuration.md` — Configuration reference
+- `README.md` — Authentication overview
+- `headplane` submodule — Password login UI
+
 ## 0.30.0 (202x-xx-xx)
 
 **Minimum supported Tailscale client version: v1.82.0**
