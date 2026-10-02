@@ -184,4 +184,3 @@ func (h *HeadplaneAuth) generateToken() (string, error) {
 	}
 	return base64.URLEncoding.EncodeToString(b), nil
 }
-
