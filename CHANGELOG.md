@@ -4,6 +4,28 @@
 
 **Minimum supported Tailscale client version: v1.82.0**
 
+### Web-based Machine Approval (Phase 12)
+
+Added web interface support for approving pending machines:
+
+- **Machine approval API** - REST endpoints for single and bulk machine approval
+  - `POST /api/v1/machines/{id}/approve` - Approve a single machine by ID
+  - `POST /api/v1/machines/approve` - Bulk approve multiple machines
+- **Headplane UI integration** - View and approve pending machines through the web interface
+  - Pending machines list with status badges and metadata
+  - Single machine approval with user assignment confirmation
+  - Bulk selection and approval workflow
+  - Real-time status updates and error handling
+- **Documentation** - Comprehensive guides for API and UI workflows
+  - API reference with request/response schemas and curl examples
+  - Registration methods updated to include web-based approval
+  - UI guide with approval workflow, permissions, and troubleshooting
+- **Permissions** - API key-based authentication with machine management scopes
+- **Error handling** - Detailed error messages for common failure cases
+
+This complements existing CLI (`headscale auth register`) and API-only approval methods,
+providing a streamlined workflow for administrators managing multiple machines.
+
 ### Monitoring/Alerting Webhooks (Phase 11, Task 3)
 
 Added webhook support for monitoring and alerting integrations:

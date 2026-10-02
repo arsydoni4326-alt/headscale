@@ -58,6 +58,107 @@ Headscale server at `/api/v1/docs` for details.
         https://headscale.example.com/api/v1/auth/register
     ```
 
+### Machine approval
+
+The fork provides API endpoints for approving pending machines that have initiated
+web authentication. Machines awaiting approval can be approved individually or in bulk.
+
+!!! note "Coordinate with backend agent"
+    The exact request/response schemas, error codes, and authentication requirements
+    need to be confirmed with the backend API agent. Placeholders below represent
+    expected behavior based on the task specification.
+
+=== "Approve a single machine"
+
+    Approve a specific machine by its ID.
+
+    **Endpoint:** `POST /api/v1/machines/{id}/approve`
+
+    **Authentication:** Requires API key with machine management permissions.
+
+    **Path parameters:**
+
+    - `id` (required): Machine ID to approve
+
+    **Request body:** (TBD - confirm with backend agent)
+
+    ```json
+    {
+      "user": "<USER>"
+    }
+    ```
+
+    **Response:** (TBD - confirm with backend agent)
+
+    ```json
+    {
+      "machine": {
+        "id": "12345",
+        "name": "laptop",
+        "user": "alice",
+        "approved": true,
+        "online": true
+      }
+    }
+    ```
+
+    **Example:**
+
+    ```console
+    curl -X POST \
+      -H "Authorization: Bearer <API_KEY>" \
+      --json '{"user": "alice"}' \
+      https://headscale.example.com/api/v1/machines/12345/approve
+    ```
+
+=== "Bulk approve machines"
+
+    Approve multiple machines in a single request.
+
+    **Endpoint:** `POST /api/v1/machines/approve`
+
+    **Authentication:** Requires API key with machine management permissions.
+
+    **Request body:** (TBD - confirm with backend agent)
+
+    ```json
+    {
+      "machineIds": ["12345", "12346", "12347"],
+      "user": "<USER>"
+    }
+    ```
+
+    **Response:** (TBD - confirm with backend agent)
+
+    ```json
+    {
+      "approved": ["12345", "12346", "12347"],
+      "failed": [],
+      "errors": {}
+    }
+    ```
+
+    **Example:**
+
+    ```console
+    curl -X POST \
+      -H "Authorization: Bearer <API_KEY>" \
+      --json '{"machineIds": ["12345", "12346"], "user": "alice"}' \
+      https://headscale.example.com/api/v1/machines/approve
+    ```
+
+**Common error responses:** (TBD - confirm with backend agent)
+
+- `400 Bad Request` - Invalid request body or missing required fields
+- `401 Unauthorized` - Missing or invalid API key
+- `403 Forbidden` - Insufficient permissions
+- `404 Not Found` - Machine ID not found
+- `409 Conflict` - Machine already approved or in invalid state
+
+See the [registration methods](registration.md#web-authentication) documentation for
+the complete web-based approval workflow, including CLI approval with
+`headscale auth register`.
+
 ### Update check
 
 The fork exposes a public, unauthenticated endpoint that reports the running

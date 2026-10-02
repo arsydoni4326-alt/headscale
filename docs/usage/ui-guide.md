@@ -78,6 +78,21 @@ has its own subdirectory when needed.
 |-----------|---------|--------|
 | Default   | _Screenshot placeholder_ | _Screenshot placeholder_ |
 
+#### Machine Approval
+
+!!! note "Coordinate with frontend agent"
+    The exact UI workflow, terminology, permissions, and component names need to be
+    confirmed with the frontend UI agent. Placeholders below represent expected
+    behavior based on the task specification.
+
+| State     | Desktop | Mobile |
+|-----------|---------|--------|
+| Pending Machines List | _Screenshot placeholder_ | _Screenshot placeholder_ |
+| Single Machine Approval | _Screenshot placeholder_ | _Screenshot placeholder_ |
+| Bulk Approval | _Screenshot placeholder_ | _Screenshot placeholder_ |
+| Approval Success | _Screenshot placeholder_ | _Screenshot placeholder_ |
+| Approval Error | _Screenshot placeholder_ | _Screenshot placeholder_ |
+
 ---
 
 ## UI Flow Diagrams
@@ -100,6 +115,26 @@ flowchart LR
     A[Register request] --> B[Confirm page]
     B -->|Accept| C[Success page]
     B -->|Reject / close| D[Error / Expire]
+```
+
+### Machine approval flow
+
+!!! note "Coordinate with frontend agent"
+    This workflow diagram represents the expected behavior. Final details should be
+    confirmed with the frontend UI agent.
+
+```mermaid
+flowchart LR
+    A[Machine requests registration] --> B[Pending state]
+    B --> C{Approval method}
+    C -->|Web UI| D[View pending machines]
+    C -->|CLI| E[headscale auth register]
+    C -->|API| F[POST /api/v1/machines/.../approve]
+    D --> G[Single or bulk approve]
+    G --> H[Machine approved]
+    E --> H
+    F --> H
+    H --> I[Machine joins network]
 ```
 
 ### Authentication flow
@@ -259,6 +294,106 @@ When implementing new routes or features:
 3. **Error states** — Use `ErrorBanner` for errors and `PageError` for route-level errors
 4. **Filtered empty states** — Use `EmptyState` variant `filtered` with a "Clear Filters" action
 5. **Icon-only buttons** — Always provide `aria-label` or visible text via `.sr-only`
+
+---
+
+## Machine Approval Workflow
+
+!!! note "Coordinate with frontend agent"
+    The specific UI pages, routes, components, terminology, and interaction patterns
+    below are placeholders. Final details must be confirmed with the frontend UI agent
+    to ensure accuracy.
+
+### Overview
+
+The machine approval feature allows administrators to review and approve machines
+that have initiated web authentication. Pending machines can be approved individually
+or in bulk through the Headplane web interface.
+
+### Viewing Pending Machines
+
+**Expected route:** `/machines` or `/machines?status=pending`
+
+**Steps:**
+
+1. Navigate to the Machines page in Headplane
+2. Filter or view machines with "Pending" status
+3. Review machine details: hostname, user, IP address, last seen timestamp
+
+**UI elements:**
+
+- Status badge showing "Pending" state
+- Machine metadata (hostname, requested user, tags if applicable)
+- Timestamp of registration request
+- Actions: Approve button, Reject button (if supported)
+
+### Approving a Single Machine
+
+**Steps:**
+
+1. From the pending machines list, locate the machine to approve
+2. Click the "Approve" button or action menu
+3. Confirm the user assignment (if required)
+4. The machine transitions to "Approved" status
+5. Success notification appears confirming approval
+
+**Expected behavior:**
+
+- Optimistic UI update (machine moves from pending to approved immediately)
+- API call to `POST /api/v1/machines/{id}/approve`
+- Error handling if approval fails (rollback UI state, show error message)
+- Success feedback (toast notification or inline message)
+
+### Bulk Approval
+
+**Steps:**
+
+1. From the pending machines list, select multiple machines using checkboxes
+2. Click "Approve Selected" or bulk action button
+3. Confirm bulk approval (if required)
+4. All selected machines transition to "Approved" status
+5. Success notification shows count of approved machines
+
+**Expected behavior:**
+
+- Bulk selection UI with "Select All" and individual checkboxes
+- Disabled bulk actions when no machines are selected
+- API call to `POST /api/v1/machines/approve` with array of machine IDs
+- Partial success handling (some machines approved, others failed)
+- Detailed error reporting for any failed approvals
+
+### Permissions
+
+**Required permissions:** (TBD - confirm with frontend agent)
+
+- Admin or machine management role
+- API key with appropriate scopes
+- User must have permission to assign machines to the specified user
+
+**Behavior when unauthorized:**
+
+- Approve buttons are hidden or disabled
+- Attempting approval shows permission error
+- User is directed to contact an administrator
+
+### Troubleshooting
+
+**Common issues:**
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| "Permission denied" error | Insufficient API key permissions | Contact administrator to verify API key scopes |
+| Machine not appearing in pending list | Already approved or expired | Check all machines view or registration logs |
+| Bulk approval partially failed | Some machines in invalid state | Review error details, retry failed machines individually |
+| "Machine not found" error | Machine removed or auth session expired | Machine must re-initiate registration |
+
+**Debug steps:**
+
+1. Check browser console for API errors
+2. Verify API key is valid and not expired
+3. Confirm machine is in pending state via CLI: `headscale nodes list`
+4. Review Headscale server logs for detailed error messages
+5. Test API endpoint directly with curl (see [API docs](../ref/api.md#machine-approval))
 
 ---
 
