@@ -103,6 +103,9 @@ type Headscale struct {
 	authProvider   AuthProvider
 	mapBatcher     *mapper.Batcher
 
+	// Headplane password authentication
+	headplaneAuth *HeadplaneAuth
+
 	clientStreamsOpen sync.WaitGroup
 }
 
@@ -193,6 +196,9 @@ func NewHeadscale(cfg *types.Config) (*Headscale, error) {
 	}
 
 	app.authProvider = authProvider
+
+	// Initialize Headplane password authentication
+	app.headplaneAuth = NewHeadplaneAuth(cfg)
 
 	if app.cfg.TailcfgDNSConfig != nil && app.cfg.TailcfgDNSConfig.Proxied { // if MagicDNS
 		// TODO(kradalby): revisit why this takes a list.
@@ -512,6 +518,8 @@ func (h *Headscale) createRouter(apiV1Mux, apiV2Mux http.Handler) *chi.Mux {
 	r.Route("/api", func(r chi.Router) {
 		r.Handle("/v1/*", serveHumaMux(apiV1Mux))
 		r.Handle("/v2/*", serveHumaMux(apiV2Mux))
+		// Headplane password authentication endpoint (no API key required)
+		r.Post("/v1/headplane/login", h.headplaneAuth.HandleLogin)
 	})
 	// Ping response endpoint: receives HEAD from clients responding
 	// to a [tailcfg.PingRequest]. The unguessable ping ID serves as authentication.
