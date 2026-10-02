@@ -316,6 +316,49 @@ management.
 
 **Priority:** Medium.
 
+## Phase 12 — Web-based Machine Approval [Implemented]
+
+**Objective:** Enable administrators to approve pending machines through the Headplane
+web interface, in addition to existing CLI and API methods.
+
+**Status:** Implemented in v0.30.0-arsydoni4326-alt.
+
+**Problems addressed:**
+
+- Manual CLI-only approval workflow is cumbersome for administrators managing multiple machines.
+- No visibility into pending machines without running CLI commands.
+- Bulk operations require scripting around the CLI or API.
+
+**Features/improvements:**
+
+- [x] Backend API endpoints for machine approval [Implemented]:
+  - `POST /api/v1/machines/{id}/approve` - Single machine approval
+  - `POST /api/v1/machines/approve` - Bulk machine approval
+- [x] Frontend UI for machine approval workflow [Implemented]:
+  - View pending machines in Headplane
+  - Approve individual machines with confirmation
+  - Bulk selection and approval
+  - Real-time status updates
+  - Error handling and user feedback
+- [x] Documentation [Implemented]:
+  - API reference updated with endpoint schemas and examples
+  - Registration workflow updated to mention web-based approval
+  - UI guide with approval workflow and troubleshooting
+  - Updated ROADMAP and CHANGELOG
+
+**Technical work:** REST API endpoints, machine state management, permission checks,
+frontend integration with existing machine management UI.
+
+**UI/UX work:** Pending machines view, approval confirmation dialogs, bulk selection
+interface, status badges, error messaging.
+
+**Dependencies:** Phase 7-10 (API infrastructure, Headplane UI foundation).
+
+**Expected outcome:** Streamlined machine approval workflow accessible through the
+web interface, reducing administrator friction.
+
+**Priority:** Medium.
+
 ## Phase 11 — Advanced Features and Integrations [Proposed / Future]
 
 **Objective:** Prepare for future extensibility and large-scale use. These
