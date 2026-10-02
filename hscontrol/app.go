@@ -19,6 +19,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -155,10 +156,8 @@ func NewHeadscale(cfg *types.Config) (*Headscale, error) {
 			return
 		}
 
-		policyChanged, err := app.state.DeleteNode(node)
-		if !policyChanged.IsEmpty() {
-			app.Change(policyChanged)
-		}
+		changes, err := app.state.DeleteNode(node)
+		app.Change(changes...)
 
 		if err != nil {
 			log.Error().Err(err).EmbedObject(node).Msg("ephemeral node deletion failed")
@@ -863,12 +862,12 @@ func (h *Headscale) Serve() error {
 				}
 
 				changes, err := h.state.ReloadPolicy()
+				h.Change(changes...)
+
 				if err != nil {
 					log.Error().Err(err).Msgf("reloading policy")
 					continue
 				}
-
-				h.Change(changes...)
 
 			default:
 				info := func(msg string) { log.Info().Msg(msg) }
@@ -1153,7 +1152,7 @@ func readOrCreatePrivateKey(path string) (*key.MachinePrivate, error) {
 // All change should be enqueued here and empty will be automatically
 // ignored.
 func (h *Headscale) Change(cs ...change.Change) {
-	h.mapBatcher.AddWork(cs...)
+	h.mapBatcher.AddWork(slices.Concat(cs, h.state.DrainSelfRefreshes())...)
 }
 
 // HTTPHandler returns an [http.Handler] for the [Headscale] control server.
