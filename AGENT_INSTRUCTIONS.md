@@ -1,109 +1,97 @@
-# Phase 13c Task 1: Backend User Model & Auth
+# Phase 13c Task 2: Backend Per-User Settings
 
-**Worktree:** `/home/denny/Project/headscale-multiuser-backend-auth`  
-**Branch:** `feature/multiuser-backend-auth`  
+**Worktree:** `/home/denny/Project/headscale-multiuser-per-user-settings`  
+**Branch:** `feature/multiuser-per-user-settings`  
 **Base Commit:** `880a8a7d9abb0cfb77fcb20e767aa67cee4cc02a`
 
 ## Objective
 
-Implement foundational multi-user backend:
-- Add `headplane_users` table for multiple user accounts
-- Migrate single-user data to new schema
-- Implement user registration (admin-only)
-- Implement multi-user login with username/password
-- Session management with user ID
-- Password hashing with bcrypt
-- Comprehensive tests
+Refactor settings storage from single-user to per-user:
+- Modify `headplane_settings` table to link to user ID
+- Update settings API endpoints to be user-aware
+- Migrate existing single-user settings to default admin user
+- Each user gets their own API key, theme, profile
+
+## Dependencies
+
+**Blocked until Task 1 (Backend User Model & Auth) is merged.**
 
 ## Context
 
-- Phase 13a complete: single-user password auth exists
-- Phase 13b complete: single-user settings storage exists
-- This task enables multiple users with individual credentials
-- Must preserve backward compatibility
+- Phase 13b has single-user settings in `headplane_settings` table
+- Current schema has single-row constraint (id=1)
+- Need to change to multi-row, keyed by user_id
 
-## Database Schema
+## Schema Changes
 
+**Before:**
 ```sql
-CREATE TABLE headplane_users (
+CREATE TABLE headplane_settings (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  api_key_encrypted TEXT,
+  ...
+);
+```
+
+**After:**
+```sql
+CREATE TABLE headplane_settings (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  username TEXT UNIQUE NOT NULL,
-  password_hash TEXT NOT NULL,
-  role TEXT DEFAULT 'user',
-  created_at TIMESTAMP,
-  updated_at TIMESTAMP
+  user_id INTEGER UNIQUE NOT NULL,
+  api_key_encrypted TEXT,
+  api_key_salt TEXT,
+  theme TEXT DEFAULT 'light',
+  profile_name TEXT,
+  updated_at TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES headplane_users(id) ON DELETE CASCADE
 );
 ```
 
 ## Key Changes
 
-1. **New table**: `headplane_users` with username, password_hash, role
-2. **Migration**: Auto-create admin user from config password on first startup
-3. **Login**: Change from `{password}` to `{username, password}`
-4. **Session**: Store user ID, not just token
-5. **Endpoints**: 
-   - POST /api/v1/headplane/register (admin-only)
-   - GET /api/v1/headplane/users (admin-only)
-   - DELETE /api/v1/headplane/users/:id (admin-only)
-
-## Files to Create
-
-- `hscontrol/db/headplane_users.go` - Schema definition
-- `hscontrol/headplane_users.go` - CRUD functions
-- `hscontrol/headplane_users_test.go` - Tests
+1. Remove single-row constraint
+2. Add `user_id` column with UNIQUE constraint
+3. Add foreign key to `headplane_users`
+4. Update GetSettings/UpdateSettings to filter by user_id
+5. Migrate existing settings row to admin user (id=1)
 
 ## Files to Modify
 
-- `hscontrol/headplane_auth.go` - Multi-user login logic
-- `hscontrol/app.go` - Register endpoints
-- `hscontrol/db/db.go` - Auto-migrate table
+- `hscontrol/headplane_settings.go` - Add user_id parameter
+- `hscontrol/db/db.go` - Migration for schema change
+- `hscontrol/headplane_settings_test.go` - Update tests
+- `hscontrol/app.go` - Update endpoint handlers
 
 ## Implementation Steps
 
-1. Define HeadplaneUser struct in db/headplane_users.go
-2. Add auto-migration in db/db.go
-3. Create migration function for single→multi user
-4. Implement RegisterUser, ListUsers, DeleteUser
-5. Update login handler for username/password
-6. Update session to store user ID
-7. Add admin-only middleware for user management
-8. Write comprehensive tests
+1. Add migration to modify headplane_settings table
+2. Update HeadplaneSettings struct with UserID field
+3. Modify GetSettings(userID) and UpdateSettings(userID, ...)
+4. Update API handlers to extract user ID from session
+5. Migrate existing settings row to user_id=1 (admin)
+6. Update all tests for multi-user settings
 
 ## Testing
 
 ```bash
-cd /home/denny/Project/headscale-multiuser-backend-auth
-go test ./hscontrol -v -run TestHeadplane
+cd /home/denny/Project/headscale-multiuser-per-user-settings
+go test ./hscontrol -v -run TestHeadplaneSettings
 go test ./...
 ```
 
 ## Acceptance Criteria
 
-- [ ] `headplane_users` table created
-- [ ] Bcrypt password hashing (cost 12)
-- [ ] User registration endpoint works
-- [ ] Multi-user login with username/password
-- [ ] Session stores user ID
-- [ ] List/delete users endpoints
-- [ ] Auto-migration from single-user
+- [ ] Settings table has user_id column
+- [ ] Foreign key to headplane_users
+- [ ] Each user has independent settings
+- [ ] Settings API filtered by authenticated user
+- [ ] Existing settings migrated to admin
 - [ ] All tests pass
-- [ ] No regressions
-
-## Dependencies
-
-**This is the foundational task.** All other Phase 13c tasks depend on this being merged first.
 
 ## Completion
 
-1. Run all tests
-2. Commit changes
-3. Push: `git push -u origin feature/multiuser-backend-auth`
-4. Report completion
+1. Run tests
+2. Commit and push: `git push -u origin feature/multiuser-per-user-settings`
+3. Report completion
 
-**Do not merge.** Must be reviewed first.
-
-## References
-
-- `hscontrol/headplane_auth.go` - Current auth
-- `hscontrol/headplane_settings.go` - Settings storage
-- `ROADMAP.md` Phase 13c
+**Do not merge** until Task 1 is merged and this is reviewed.
