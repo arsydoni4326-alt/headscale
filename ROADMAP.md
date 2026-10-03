@@ -479,9 +479,9 @@ eventual multi-user support. We're taking an incremental approach (13a → 13b �
 
 ---
 
-### Phase 13b — Settings Menu (Single User) [Planned]
+### Phase 13b — Settings Menu (Single User) [Implemented]
 
-**Status:** 🚧 Planned (next phase for implementation).
+**Status:** ✅ Implemented (merged 2026-10-03).
 
 **Objective:** Add a Settings menu for the authenticated user to manage their
 Headscale API key, change password, and customize preferences. This phase does
@@ -489,72 +489,63 @@ NOT add multi-user support — it enhances the single-user experience from 13a.
 
 **Requirements:**
 
-- [ ] Settings page accessible after password authentication [Planned].
-- [ ] **API Key Management**: Store and update the Headscale API key used by
-      Headplane for API calls (eliminating need to re-enter at each login)
-      [Planned].
-- [ ] **Change Password**: Update the Headplane login password with current
-      password verification [Planned].
-- [ ] **Theme Selection**: Choose between dark/light themes, persisted across
-      sessions [Planned].
-- [ ] **Profile Name**: Optional display name for the authenticated user
-      [Planned].
-- [ ] **Session Info**: Display current session expiry and logout button
-      [Planned].
+- [x] Settings page accessible after password authentication.
+- [x] **API Key Management**: Store and update the Headscale API key used by
+      Headplane for API calls (eliminating need to re-enter at each login).
+- [x] **Change Password**: Update the Headplane login password with current
+      password verification.
+- [x] **Theme Selection**: Choose between dark/light/system themes, persisted across
+      sessions.
+- [x] **Profile Name**: Optional display name for the authenticated user.
+- [x] **Session Info**: Display current session expiry and logout button.
 
 **Technical work:**
 
 **Backend:**
 
-- [ ] Add settings storage (SQLite table or encrypted file for API key, theme,
-      profile name).
-- [ ] Implement `POST /api/v1/headplane/settings` — update settings.
-- [ ] Implement `GET /api/v1/headplane/settings` — retrieve settings.
-- [ ] Implement `POST /api/v1/headplane/change-password` — change password with
+- [x] Add settings storage (SQLite table for API key, theme, profile name).
+- [x] Implement `POST /api/v1/headplane/settings` — update settings.
+- [x] Implement `GET /api/v1/headplane/settings` — retrieve settings.
+- [x] Implement `POST /api/v1/headplane/change-password` — change password with
       current password verification.
-- [ ] Store Headscale API key encrypted at rest (use session token as encryption
-      context).
-- [ ] Update session validation to load stored API key automatically.
+- [x] Store Headscale API key encrypted at rest (AES-256-GCM with PBKDF2-derived key).
+- [x] Update session validation to load stored API key automatically.
 
 **Frontend:**
 
-- [ ] Create `/settings` route with sections:
+- [x] Create `/settings/profile` route with sections:
   - Account (change password, session info, logout)
   - Integration (Headscale API key input with save/update)
-  - Preferences (theme selector: dark/light)
+  - Preferences (theme selector: dark/light/system)
   - Profile (display name, optional)
-- [ ] Implement theme persistence and application (CSS variables or class-based).
-- [ ] Add "Settings" link to navigation bar after login.
-- [ ] Form validation and error handling for all settings operations.
-- [ ] Visual feedback for save/update operations.
+- [x] Implement theme persistence and application.
+- [x] Add "Settings" link to navigation bar after login.
+- [x] Form validation and error handling for all settings operations.
+- [x] Visual feedback for save/update operations.
 
-**UI/UX work:**
+**Implementation details:**
 
-- Settings page with clean tab/section layout matching existing Headplane design.
-- Password change form with current password verification and strength indicator.
-- API key input with masked display and "reveal" toggle.
-- Theme selector with immediate preview.
-- Help text explaining each setting.
+- Settings stored in single-row SQLite table (`headplane_settings`).
+- API key encrypted with AES-256-GCM using PBKDF2-derived key (100,000 iterations).
+- Per-key salt and nonce for encryption security.
+- CSRF protection on all state-changing endpoints.
+- Comprehensive unit and integration tests.
+- Documentation: user guide, API reference, integration testing guide.
 
-**Security considerations:**
+**Files changed:**
 
-- Encrypt stored API key at rest (AES-256-GCM with session-derived key).
-- Validate current password before allowing password change.
-- CSRF protection for all settings endpoints.
-- Audit log for settings changes.
-
-**Dependencies:** Phase 13a (already complete).
+- Backend: `hscontrol/headplane_settings.go`, `hscontrol/headplane_settings_test.go`, `hscontrol/app.go`
+- Frontend: `headplane/app/routes/settings/profile.tsx`, API client updates
+- Docs: `docs/usage/settings.md`, `docs/ref/api/headplane-settings.md`
 
 **Expected outcome:**
 
-1. Users log in once with their password and configure their Headscale API key in
+1. ✅ Users log in once with their password and configure their Headscale API key in
    Settings.
-2. API key is stored securely and reused across sessions (no re-entry needed).
-3. Users can change their password without editing config files.
-4. Theme preference persists across sessions.
-5. Enhanced single-user experience without the complexity of multi-user accounts.
-
-**Priority:** High.
+2. ✅ API key is stored securely and reused across sessions (no re-entry needed).
+3. ✅ Users can change their password without editing config files.
+4. ✅ Theme preference persists across sessions.
+5. ✅ Enhanced single-user experience without the complexity of multi-user accounts.
 
 ---
 
