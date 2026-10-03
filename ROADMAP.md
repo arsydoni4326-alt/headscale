@@ -430,79 +430,172 @@ UI.
 
 **Priority:** High.
 
-## Phase 13 — Simple Password Login for Headplane [Planned]
+## Phase 13 — Headplane Local Authentication and Settings
 
-**Objective:** Provide an alternative, simpler authentication method for
-Headplane users that does not require remembering complex API keys, while
-maintaining backward compatibility and avoiding database schema changes.
+**Status:** Partially implemented (13a complete, 13b planned, 13c future).
 
-**Problems addressed:**
+**Objective:** Provide a local authentication system for Headplane that is
+entirely independent from Headscale API authentication. After successful login,
+users access a Settings menu where they can configure their Headscale API key
+and customize their Headplane experience.
 
-- Logging into Headplane currently requires a complex, auto-generated API key
-  from Headscale that is difficult for users to remember and manage.
-- Users need a more user-friendly authentication method for day-to-day access
-  to the Headplane web interface.
-- The current API key method, while secure and appropriate for programmatic
-  access, creates friction for human users accessing the web UI.
+**Important note:** This phase was originally titled "Simple Password Login for
+Headplane" and was partially implemented (commits 8e2131bf-966978f9) with a
+simplified single-password approach. The full scope requires a Settings menu and
+eventual multi-user support. We're taking an incremental approach (13a → 13b →
+13c) to deliver value progressively.
 
-**Features/improvements:**
+---
 
-- [ ] Password-based login for Headplane alongside the existing API key method
+### Phase 13a — Simple Password Authentication [Implemented]
+
+**Status:** ✅ Complete (merged in v0.35.9-arsydoni4326-alt)
+
+**Implemented features:**
+
+- [x] Single password authentication for Headplane (no multi-user).
+- [x] Password configured via `headplane.password` in config.yaml or
+      `HEADSCALE_HEADPLANE_PASSWORD` environment variable.
+- [x] Login endpoint: `POST /api/v1/headplane/login`.
+- [x] Session management with 24-hour expiry and secure cookies.
+- [x] Rate limiting (5 login attempts per minute per IP).
+- [x] Constant-time password comparison to prevent timing attacks.
+- [x] Password/API key toggle in login UI (password is default).
+- [x] Full backward compatibility with API key authentication.
+- [x] Comprehensive documentation in `docs/usage/authentication.md`.
+
+**Files changed:**
+
+- Backend: `hscontrol/headplane_auth.go`, `hscontrol/headplane_auth_test.go`,
+  `hscontrol/types/config.go`, `hscontrol/app.go`
+- Frontend: `headplane/app/routes/auth/login/*`, `headplane/app/server/web/auth.ts`
+- Docs: `docs/usage/authentication.md`, `config-example.yaml`
+
+**Limitations:**
+
+- Single shared password (no user accounts).
+- No settings menu or user preferences.
+- API key must still be entered at login (not stored).
+
+---
+
+### Phase 13b — Settings Menu (Single User) [Planned]
+
+**Status:** 🚧 Planned (next phase for implementation).
+
+**Objective:** Add a Settings menu for the authenticated user to manage their
+Headscale API key, change password, and customize preferences. This phase does
+NOT add multi-user support — it enhances the single-user experience from 13a.
+
+**Requirements:**
+
+- [ ] Settings page accessible after password authentication [Planned].
+- [ ] **API Key Management**: Store and update the Headscale API key used by
+      Headplane for API calls (eliminating need to re-enter at each login)
       [Planned].
-- [ ] Default password (configurable via config file or environment variable)
-      that can be changed by administrators [Planned].
-- [ ] Authentication restricted to Headplane integration only — does not grant
-      general API access like API keys do [Planned].
-- [ ] No database schema changes required; password stored in configuration,
-      environment, or in-memory [Planned].
-- [ ] Existing API key creation and authentication method remains fully
-      functional and unchanged [Planned].
-- [ ] Password change capability via configuration update or management command
+- [ ] **Change Password**: Update the Headplane login password with current
+      password verification [Planned].
+- [ ] **Theme Selection**: Choose between dark/light themes, persisted across
+      sessions [Planned].
+- [ ] **Profile Name**: Optional display name for the authenticated user
+      [Planned].
+- [ ] **Session Info**: Display current session expiry and logout button
       [Planned].
 
 **Technical work:**
 
-- Implement password-based authentication endpoint or extend existing
-  authentication to accept simple password for Headplane.
-- Store password in configuration file (e.g., `config.yaml`) or environment
-  variable (e.g., `HEADSCALE_HEADPLANE_PASSWORD`).
-- Add authentication middleware to validate the simple password specifically for
-  Headplane requests.
-- Ensure the authentication method is clearly scoped to Headplane and does not
-  grant broader API access.
-- Document configuration options and security considerations.
-- Add unit tests for the new authentication method.
-- Update Headscale API documentation to clarify the difference between API keys
-  (programmatic access) and Headplane password (web UI access).
+**Backend:**
+
+- [ ] Add settings storage (SQLite table or encrypted file for API key, theme,
+      profile name).
+- [ ] Implement `POST /api/v1/headplane/settings` — update settings.
+- [ ] Implement `GET /api/v1/headplane/settings` — retrieve settings.
+- [ ] Implement `POST /api/v1/headplane/change-password` — change password with
+      current password verification.
+- [ ] Store Headscale API key encrypted at rest (use session token as encryption
+      context).
+- [ ] Update session validation to load stored API key automatically.
+
+**Frontend:**
+
+- [ ] Create `/settings` route with sections:
+  - Account (change password, session info, logout)
+  - Integration (Headscale API key input with save/update)
+  - Preferences (theme selector: dark/light)
+  - Profile (display name, optional)
+- [ ] Implement theme persistence and application (CSS variables or class-based).
+- [ ] Add "Settings" link to navigation bar after login.
+- [ ] Form validation and error handling for all settings operations.
+- [ ] Visual feedback for save/update operations.
 
 **UI/UX work:**
 
-- Update Headplane login form to support password-based authentication alongside
-  API key input.
-- Add settings page or configuration UI to allow administrators to change the
-  Headplane password.
-- Display clear messaging about which authentication method is being used.
-- Document the login process and password management for end users.
-
-**Dependencies:** None (can be implemented independently of other phases).
-
-**Expected outcome:** Headplane users can log in with a simple, memorable
-password configured by the administrator, reducing friction for web UI access
-while maintaining the existing API key method for programmatic access. No
-database migrations or schema changes are required, ensuring full backward
-compatibility.
-
-**Priority:** Medium-High (user experience improvement).
+- Settings page with clean tab/section layout matching existing Headplane design.
+- Password change form with current password verification and strength indicator.
+- API key input with masked display and "reveal" toggle.
+- Theme selector with immediate preview.
+- Help text explaining each setting.
 
 **Security considerations:**
 
-- The default password should be documented as a starting point that must be
-  changed in production deployments.
-- Password should be transmitted securely (HTTPS required for production use).
-- Consider rate limiting for password authentication to prevent brute-force
-  attacks.
-- The simple password method should be clearly documented as appropriate for
-  Headplane web UI access only, not for API automation or scripting.
+- Encrypt stored API key at rest (AES-256-GCM with session-derived key).
+- Validate current password before allowing password change.
+- CSRF protection for all settings endpoints.
+- Audit log for settings changes.
+
+**Dependencies:** Phase 13a (already complete).
+
+**Expected outcome:**
+
+1. Users log in once with their password and configure their Headscale API key in
+   Settings.
+2. API key is stored securely and reused across sessions (no re-entry needed).
+3. Users can change their password without editing config files.
+4. Theme preference persists across sessions.
+5. Enhanced single-user experience without the complexity of multi-user accounts.
+
+**Priority:** High.
+
+---
+
+### Phase 13c — Multi-User Support [Future/Proposed]
+
+**Status:** 💡 Proposed (future consideration, not committed).
+
+**Objective:** Extend Phase 13b to support multiple Headplane user accounts with
+individual credentials, API keys, and preferences.
+
+**Requirements (tentative):**
+
+- [ ] Local user store with username + password hash for each user [Proposed].
+- [ ] User registration/management (admin creates users) [Proposed].
+- [ ] Per-user settings storage (API key, theme, profile per user) [Proposed].
+- [ ] User list and management UI (admin only) [Proposed].
+- [ ] Optional: role-based access (admin vs. regular user) [Proposed].
+- [ ] Optional: avatar upload per user [Proposed].
+
+**Dependencies:** Phase 13b (settings infrastructure must exist first).
+
+**Note:** This phase is **proposed** and requires explicit approval before
+implementation. The single-user + settings approach (13a + 13b) may be
+sufficient for most deployments. Multi-user adds significant complexity and
+should only be implemented if there's demonstrated need.
+
+**Priority:** Low (deferred pending user feedback on 13a/13b).
+
+---
+
+## Phase 13 Architecture Note
+
+The separation of concerns across all sub-phases:
+
+- **Headplane authentication** (13a, 13c): Local password validation, session
+  management. No interaction with Headscale API for login.
+- **Headscale API key** (13b, 13c): Stored in Headplane settings after login,
+  used by Headplane to make authenticated API calls to Headscale on behalf of the
+  user.
+- **User logs into Headplane** with Headplane password, then configures Headscale
+  API key in Settings so Headplane can interact with Headscale.
 
 ## Tracking
 
