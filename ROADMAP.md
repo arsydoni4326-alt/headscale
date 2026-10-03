@@ -504,38 +504,29 @@ NOT add multi-user support — it enhances the single-user experience from 13a.
 
 **Technical work:**
 
-### Headplane-local authentication:
+**Backend:**
 
-- Implement a local user model/store for Headplane (could be SQLite, JSON file,
-  or other lightweight storage).
-- Implement secure password hashing (bcrypt or argon2) for password storage.
-- Create login endpoint that validates credentials against local user store.
-- Implement session management with secure, HTTP-only cookies or JWT tokens.
-- Add rate limiting middleware to prevent brute-force attacks.
-- Ensure authentication state is maintained across page refreshes.
-- Add logout endpoint that invalidates the session.
+- [ ] Add settings storage (SQLite table or encrypted file for API key, theme,
+      profile name).
+- [ ] Implement `POST /api/v1/headplane/settings` — update settings.
+- [ ] Implement `GET /api/v1/headplane/settings` — retrieve settings.
+- [ ] Implement `POST /api/v1/headplane/change-password` — change password with
+      current password verification.
+- [ ] Store Headscale API key encrypted at rest (use session token as encryption
+      context).
+- [ ] Update session validation to load stored API key automatically.
 
-### Settings menu implementation:
+**Frontend:**
 
-- Create Settings page/modal in Headplane UI.
-- Implement API endpoints for:
-  - Updating Headscale API key (stored securely in Headplane's local storage or
-    encrypted backend storage).
-  - Changing user password (with current password verification).
-  - Updating profile information (name, avatar).
-  - Theme and language preference persistence.
-- Add form validation and error handling for all settings operations.
-- Implement secure file upload for avatar images with size/type validation.
-- Store user preferences (theme, language) in local storage or user profile.
-
-### Security considerations:
-
-- Use HTTPS in production (mandatory for credential transmission).
-- Implement CSRF protection for all state-changing operations.
-- Validate all user input on both client and server side.
-- Store Headscale API key encrypted at rest if persisted server-side.
-- Implement proper session timeout and renewal mechanisms.
-- Add audit logging for authentication events and settings changes.
+- [ ] Create `/settings` route with sections:
+  - Account (change password, session info, logout)
+  - Integration (Headscale API key input with save/update)
+  - Preferences (theme selector: dark/light)
+  - Profile (display name, optional)
+- [ ] Implement theme persistence and application (CSS variables or class-based).
+- [ ] Add "Settings" link to navigation bar after login.
+- [ ] Form validation and error handling for all settings operations.
+- [ ] Visual feedback for save/update operations.
 
 **UI/UX work:**
 
