@@ -2,7 +2,89 @@
 
 ## 0.35.9-arsydoni4326-alt (2026-10-02)
 
-### Simple Password Login for Headplane (Phase 13)
+### Settings Menu for Headplane (Phase 13b) [IN PROGRESS]
+
+Added a Settings menu to Headplane for managing user preferences and Headscale integration:
+
+- **Settings Page** — Comprehensive settings interface accessible after password login
+  - Account section: Change password with current password verification
+  - Integration section: Store and manage Headscale API key (encrypted at rest)
+  - Preferences section: Select theme (light/dark) with instant application
+  - Profile section: Set optional display name
+  - All settings persist across login sessions
+  
+- **Backend API Endpoints** — RESTful API for settings management
+  - `GET /api/v1/headplane/settings` — Retrieve current settings (decrypts API key)
+  - `POST /api/v1/headplane/settings` — Update settings (encrypts API key before storage)
+  - `POST /api/v1/headplane/change-password` — Change password with verification
+  - All endpoints require valid session token authentication
+  - Full OpenAPI-style schema documentation
+  
+- **API Key Storage** — Secure encrypted storage eliminates re-entry at each login
+  - AES-256-GCM encryption with PBKDF2-derived keys
+  - Session-token-based key derivation for security
+  - Automatic loading on login with valid password
+  - Support for update, removal, and rotation workflows
+  
+- **Password Management** — Self-service password changes
+  - Current password verification required (constant-time comparison)
+  - Updates config file or environment variable
+  - Existing sessions remain valid after change
+  - Comprehensive error handling and user feedback
+  
+- **Theme System** — Persistent light/dark theme preferences
+  - Immediate application without page reload
+  - Server-side storage survives logout/login
+  - Pre-render application prevents theme flash
+  
+- **Profile Customization** — Optional display name for personalization
+  - Appears in navigation bar and UI
+  - Up to 100 characters
+  - Server-side persistence
+  
+- **Security Features**:
+  - API key encrypted at rest with AES-256-GCM
+  - Session-derived encryption keys for per-user security
+  - CSRF protection on all settings endpoints
+  - Constant-time password comparison prevents timing attacks
+  - No secrets logged or exposed in responses
+  - HTTPS required for production use
+  
+- **Single-User Model** (Phase 13b):
+  - Single settings row in SQLite database
+  - Single-row constraint enforces one user
+  - Multi-user support planned for Phase 13c
+  
+- **Documentation** — Comprehensive user and API documentation
+  - `docs/usage/settings.md` — Complete user guide with troubleshooting
+  - `docs/ref/api/headplane-settings.md` — Full OpenAPI-style API reference
+  - `docs/usage/authentication.md` — Updated with settings integration
+  - Security best practices and known limitations documented
+  
+- **Backward Compatibility**:
+  - No breaking changes to Phase 13a password authentication
+  - API key authentication fully preserved
+  - Settings are optional enhancements
+  - Existing deployments work without configuration changes
+
+This feature enhances the single-user experience by eliminating API key re-entry, providing self-service password management, and allowing UI customization through persistent theme preferences.
+
+Files changed:
+- `hscontrol/headplane_settings.go` (new) — Settings API handlers
+- `hscontrol/headplane_settings_test.go` (new) — Backend unit tests
+- `hscontrol/app.go` — Registered settings endpoints
+- `headplane/` — Settings UI components and routes
+- `docs/usage/settings.md` (new) — Settings user guide
+- `docs/ref/api/headplane-settings.md` (new) — API reference
+- `docs/usage/authentication.md` — Updated with settings reference
+- `README.md` — Updated features list
+- `CHANGELOG.md` — Phase 13b entry
+
+---
+
+## 0.35.9-arsydoni4326-alt (2026-10-02)
+
+### Simple Password Login for Headplane (Phase 13a)
 
 Added password-based authentication for Headplane web UI as an alternative to API key authentication:
 
