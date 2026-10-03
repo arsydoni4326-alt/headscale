@@ -50,6 +50,7 @@ require (
 	golang.org/x/sync v0.23.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/postgres v1.6.3
+	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.2
 
 	// NOTE: modernc sqlite has a fragile dependency
@@ -171,6 +172,7 @@ require (
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mattn/go-runewidth v0.0.24 // indirect
+	github.com/mattn/go-sqlite3 v1.14.22 // indirect
 	github.com/mdlayher/netlink v1.8.0 // indirect
 	github.com/mdlayher/socket v0.5.1 // indirect
 	github.com/mitchellh/go-ps v1.0.0 // indirect
