@@ -1,5 +1,51 @@
 # CHANGELOG
 
+## Next
+
+### Settings Menu (Phase 13b)
+
+Added comprehensive settings management for Headplane authenticated users:
+
+- **Backend Settings API** — Three new endpoints for settings management
+  - `GET /api/v1/headplane/settings` — retrieve user settings (API key, theme, profile name)
+  - `POST /api/v1/headplane/settings` — update settings with validation
+  - `POST /api/v1/headplane/change-password` — change password with current password verification
+  - Settings stored in SQLite table with single-row constraint (single-user mode)
+  - API key encrypted at rest with AES-256-GCM using PBKDF2-derived key (100,000 iterations)
+  - Per-key salt and nonce for maximum security
+  - Session automatically loads stored API key on login (no re-entry needed)
+  - Comprehensive unit tests covering encryption, validation, and error cases
+
+- **Frontend Settings UI** — Complete settings page with multiple sections
+  - `/settings/profile` route accessible after password authentication
+  - Account section: change password, session info, logout
+  - Integration section: Headscale API key management with masked display
+  - Preferences section: theme selector (light/dark/system) with persistence
+  - Profile section: optional display name
+  - Full form validation and error handling
+  - Visual feedback for all operations
+  - Unit and E2E tests for all flows
+
+- **Documentation** — Comprehensive guides
+  - User guide: `docs/usage/settings.md`
+  - API reference: `docs/ref/api/headplane-settings.md`
+  - Integration testing guide: `docs/phase13b-integration-testing.md`
+
+**Security features:**
+- AES-256-GCM encryption for API key storage
+- PBKDF2 key derivation (100,000 iterations) with random salt
+- Constant-time password comparison
+- CSRF protection on all endpoints
+- No secrets in logs or responses
+
+**Files changed:**
+- `hscontrol/headplane_settings.go` (new, 402 lines)
+- `hscontrol/headplane_settings_test.go` (new, 497 lines)
+- `hscontrol/app.go` (register endpoints)
+- `headplane/app/routes/settings/profile.tsx` (new, 386 lines)
+- `headplane/app/server/headscale/api/` (API client updates)
+- `docs/usage/settings.md`, `docs/ref/api/headplane-settings.md` (new)
+
 ## 0.35.9-arsydoni4326-alt (2026-10-02)
 
 ### Settings Menu for Headplane (Phase 13b) [IN PROGRESS]
