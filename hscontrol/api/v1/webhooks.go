@@ -80,7 +80,7 @@ type (
 
 type (
 	updateWebhookInput struct {
-		ID   string                   `path:"id" format:"uint" doc:"Webhook ID"`
+		ID   string `path:"id" format:"uint" doc:"Webhook ID"`
 		Body UpdateWebhookRequestBody
 	}
 	updateWebhookOutput struct {
@@ -332,5 +332,3 @@ func webhookFromState(wh *types.Webhook) Webhook {
 		UpdatedAt:      wh.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}
 }
-
-
