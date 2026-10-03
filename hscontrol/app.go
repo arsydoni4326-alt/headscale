@@ -135,6 +135,11 @@ func NewHeadscale(cfg *types.Config) (*Headscale, error) {
 		return nil, fmt.Errorf("init state: %w", err)
 	}
 
+	// Initialize Headplane settings table
+	if err := InitHeadplaneSettings(s.DB().DB); err != nil {
+		return nil, fmt.Errorf("init headplane settings: %w", err)
+	}
+
 	app := Headscale{
 		cfg:               cfg,
 		noisePrivateKey:   noisePrivateKey,
@@ -520,6 +525,10 @@ func (h *Headscale) createRouter(apiV1Mux, apiV2Mux http.Handler) *chi.Mux {
 		r.Handle("/v2/*", serveHumaMux(apiV2Mux))
 		// Headplane password authentication endpoint (no API key required)
 		r.Post("/v1/headplane/login", h.headplaneAuth.HandleLogin)
+		// Headplane settings endpoints (require valid session)
+		r.Get("/v1/headplane/settings", h.HandleGetSettings)
+		r.Post("/v1/headplane/settings", h.HandleUpdateSettings)
+		r.Post("/v1/headplane/change-password", h.HandleChangePassword)
 	})
 	// Ping response endpoint: receives HEAD from clients responding
 	// to a [tailcfg.PingRequest]. The unguessable ping ID serves as authentication.

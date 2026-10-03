@@ -1,133 +1,310 @@
-# Phase 13 Agent Instructions: Simple Password Login for Headplane
+# Agent 1: Backend Settings Implementation
 
-## Overview
-
-This document archives the parallel implementation tasks for Phase 13. All three tasks have been completed and merged into main.
+**Task:** Phase 13b Part 1 & 2 — Backend Settings Storage & Endpoints  
+**Worktree:** `/home/denny/Project/headscale-settings-backend`  
+**Branch:** `feature/settings-backend`  
+**Base Commit:** `d95c5eff`
 
 ---
 
-## Task 1: Backend Password Authentication
+## Objective
 
-**Agent:** Backend Auth Logic  
-**Worktree:** `/home/denny/Project/headscale-password-backend`  
-**Branch:** `feature/password-backend`  
-**Status:** ✅ Complete
-
-### Objective
-Implement password-based authentication for Headplane web UI that:
-- Does NOT require database schema changes
-- Stores password in configuration file or environment variable
-- Provides an alternative to API key authentication
-- Is scoped specifically to Headplane (does not grant general API access)
-
-### Completed Implementation
-- Added `POST /api/v1/headplane/login` endpoint
-- Session management with 24-hour expiry
-- Rate limiting (5 attempts per minute per IP)
-- Constant-time password comparison
-- Configuration via `headplane.password` in config.yaml or `HEADSCALE_HEADPLANE_PASSWORD` env var
+Implement backend infrastructure for Headplane settings:
+- SQLite table for storing user settings (encrypted API key, theme, profile name)
+- Settings CRUD endpoints (GET/POST)
+- Password change endpoint
+- Session enhancement to auto-load stored API key
 - Comprehensive unit tests
 
-### Files Changed
-- `hscontrol/headplane_auth.go` (new)
-- `hscontrol/headplane_auth_test.go` (new)
-- `hscontrol/types/config.go`
-- `hscontrol/app.go`
-- `config-example.yaml`
+---
+
+## Context
+
+Phase 13a (simple password auth) is complete. Users can log in with a password, but:
+- Must re-enter API key at each login (no storage)
+- Cannot change password without editing config
+- No theme or profile customization
+
+This task fixes that by adding persistent settings storage.
 
 ---
 
-## Task 2: Documentation
+## Architecture Overview
 
-**Agent:** Documentation  
-**Worktree:** `/home/denny/Project/headscale-password-docs`  
-**Branch:** `feature/password-docs`  
-**Status:** ✅ Complete
+### Settings Storage
 
-### Objective
-Update all relevant documentation to cover password-based login for Headplane, including setup, configuration, security, and usage.
+**SQLite table** in Headplane's existing database (already used for audit log):
 
-### Completed Documentation
-- Created `docs/usage/authentication.md` - Complete authentication guide
-- Created `docs/troubleshooting.md` - Troubleshooting guide for auth issues
-- Updated `docs/ref/configuration.md` - Password configuration reference
-- Updated `config-example.yaml` - Comprehensive inline documentation
-- Updated `README.md` - Authentication section
+```sql
+CREATE TABLE headplane_settings (
+  id INTEGER PRIMARY KEY CHECK (id = 1),  -- Single row constraint
+  api_key_encrypted TEXT,                 -- AES-256-GCM encrypted
+  api_key_nonce TEXT,                     -- Encryption nonce
+  theme TEXT DEFAULT 'light',             -- 'light' or 'dark'
+  profile_name TEXT,                      -- Optional display name
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
 
-### Coverage
-- Configuration via config.yaml and environment variable
-- Security best practices (HTTPS, strong passwords, rate limiting)
-- Login API endpoint documentation
-- Session management details
-- Troubleshooting common issues
-- Clear distinction between password auth (web UI) and API keys (automation)
+### Encryption
 
----
+**API key encryption:** AES-256-GCM with PBKDF2-derived key from session token.
 
-## Task 3: Frontend Password Login UI
+**Rationale:**
+- API key is sensitive (grants full Headscale access)
+- Session token is already secure (256-bit random)
+- PBKDF2 adds key stretching
+- AES-GCM provides authenticated encryption
 
-**Agent:** Frontend Login UI  
-**Worktree:** `/home/denny/Project/headscale-password-frontend`  
-**Branch:** `feature/password-frontend`  
-**Status:** ✅ Complete
+### API Endpoints
 
-### Objective
-Update Headplane login form to support password-based authentication alongside the existing API key method.
+1. **GET /api/v1/headplane/settings**
+   - Requires: Valid password session token (from Phase 13a)
+   - Returns: `{apiKey: string, theme: string, profileName: string}`
+   - Decrypts API key before returning
 
-### Completed Implementation
-- Password/API Key toggle in login form (password is default)
-- Password field with show/hide toggle
-- Backend API integration (`POST /api/v1/headplane/login`)
-- Session token management
-- Error handling (401 invalid, 429 rate limit, 503 not configured)
-- Comprehensive unit and E2E tests
-- Preserved API key login functionality
+2. **POST /api/v1/headplane/settings**
+   - Requires: Valid password session token
+   - Body: `{apiKey?: string, theme?: string, profileName?: string}`
+   - Encrypts API key before storing
+   - Returns: `{success: true}`
 
-### Files Changed (in headplane submodule)
-- `headplane/app/server/headscale/api/transport.ts`
-- `headplane/app/server/headscale/api/index.ts`
-- `headplane/app/server/web/auth.ts`
-- `headplane/app/server/db/schema.ts`
-- `headplane/app/routes/auth/login/action.ts`
-- `headplane/app/routes/auth/login/page.tsx`
-- `headplane/tests/unit/auth/auth-service.test.ts`
-- `headplane/tests/unit/auth/password-login-action.test.ts` (new)
-- `headplane/tests/e2e/login.spec.ts`
+3. **POST /api/v1/headplane/change-password**
+   - Requires: Valid password session token
+   - Body: `{currentPassword: string, newPassword: string}`
+   - Validates current password (constant-time comparison)
+   - Updates config password in-memory
+   - Returns: `{success: true}`
 
 ---
 
-## Security Considerations
+## Implementation Tasks
 
-- Password transmitted over HTTPS only (secure cookies)
-- Rate limiting prevents brute-force attacks (5 attempts per minute per IP)
-- Constant-time password comparison prevents timing attacks
-- Session tokens: 256-bit random, 24-hour expiry
-- Automatic session cleanup (5-minute interval)
-- Password never serialized in JSON output
+### Task 1: Settings Table Schema
+
+**File:** Create `hscontrol/headplane_settings.go`
+
+1. Define `HeadplaneSettings` struct:
+   ```go
+   type HeadplaneSettings struct {
+       ID            int       `gorm:"primaryKey;check:id = 1"`
+       APIKeyEncrypted string `gorm:"column:api_key_encrypted"`
+       APIKeyNonce     string `gorm:"column:api_key_nonce"`
+       Theme          string `gorm:"default:light"`
+       ProfileName    string `gorm:"column:profile_name"`
+       UpdatedAt      time.Time
+   }
+   ```
+
+2. Implement table creation in Headplane DB init
+   - Check where Headplane audit table is created
+   - Add settings table creation there
+
+### Task 2: Encryption/Decryption Functions
+
+**File:** `hscontrol/headplane_settings.go`
+
+Implement:
+- `encryptAPIKey(apiKey string, sessionToken string) (encrypted string, nonce string, error)`
+- `decryptAPIKey(encrypted string, nonce string, sessionToken string) (string, error)`
+
+Use:
+- `crypto/aes` for AES-256-GCM
+- `crypto/cipher` for GCM mode
+- `golang.org/x/crypto/pbkdf2` for key derivation
+- Salt: fixed per-installation (store in config or generate once)
+
+### Task 3: Settings CRUD
+
+**File:** `hscontrol/headplane_settings.go`
+
+Implement:
+- `GetSettings(sessionToken string) (*HeadplaneSettings, error)`
+  - Query single row from table
+  - Decrypt API key
+  - Return struct
+
+- `UpdateSettings(sessionToken string, apiKey *string, theme *string, profileName *string) error`
+  - Fetch existing settings (or create if not exists)
+  - Update fields (only non-nil pointers)
+  - Encrypt API key if provided
+  - Save to database
+
+### Task 4: GET /api/v1/headplane/settings Endpoint
+
+**File:** `hscontrol/headplane_settings.go`
+
+Implement handler:
+```go
+func (b *Headscale) handleHeadplaneGetSettings(w http.ResponseWriter, r *http.Request) {
+    // Extract session token from auth header
+    // Call GetSettings(token)
+    // Return JSON: {apiKey, theme, profileName}
+}
+```
+
+Register in `hscontrol/app.go`:
+```go
+r.Get("/api/v1/headplane/settings", b.handleHeadplaneGetSettings)
+```
+
+### Task 5: POST /api/v1/headplane/settings Endpoint
+
+**File:** `hscontrol/headplane_settings.go`
+
+Implement handler:
+```go
+func (b *Headscale) handleHeadplaneUpdateSettings(w http.ResponseWriter, r *http.Request) {
+    // Parse JSON body
+    // Extract session token
+    // Call UpdateSettings(token, ...)
+    // Return {success: true}
+}
+```
+
+Register in `hscontrol/app.go`:
+```go
+r.Post("/api/v1/headplane/settings", b.handleHeadplaneUpdateSettings)
+```
+
+### Task 6: POST /api/v1/headplane/change-password Endpoint
+
+**File:** `hscontrol/headplane_auth.go` (modify existing file)
+
+Implement handler:
+```go
+func (b *Headscale) handleHeadplaneChangePassword(w http.ResponseWriter, r *http.Request) {
+    // Parse {currentPassword, newPassword}
+    // Validate current password (constant-time)
+    // Update b.Cfg.Headplane.Password in-memory
+    // Optional: persist to config file (if writable)
+    // Return {success: true}
+}
+```
+
+Register in `hscontrol/app.go`:
+```go
+r.Post("/api/v1/headplane/change-password", b.handleHeadplaneChangePassword)
+```
+
+### Task 7: Session Enhancement
+
+**File:** `hscontrol/headplane_auth.go`
+
+Modify session validation to:
+1. Load stored API key from settings (if exists)
+2. Inject into session context
+3. Frontend API calls use stored key automatically
+
+**Implementation:**
+- In `validatePasswordSession()` or similar:
+  ```go
+  settings, _ := GetSettings(token)
+  if settings != nil && settings.APIKeyEncrypted != "" {
+      // Decrypt and inject into context
+  }
+  ```
+
+### Task 8: Unit Tests
+
+**File:** Create `hscontrol/headplane_settings_test.go`
+
+Test cases:
+1. `TestEncryptDecryptAPIKey` — encryption roundtrip
+2. `TestGetSettings_NotExists` — empty table returns nil
+3. `TestUpdateSettings_Create` — first update creates row
+4. `TestUpdateSettings_Update` — subsequent updates modify row
+5. `TestGetSettingsEndpoint_Success` — HTTP GET returns settings
+6. `TestUpdateSettingsEndpoint_Success` — HTTP POST updates settings
+7. `TestChangePassword_ValidCurrent` — password change succeeds
+8. `TestChangePassword_InvalidCurrent` — wrong current password rejected
+9. `TestSettingsRequireAuth` — unauthenticated requests fail
+
+Use existing test patterns from `hscontrol/headplane_auth_test.go`.
 
 ---
 
-## Backward Compatibility
+## Dependencies
 
-- API key authentication fully preserved and functional
-- No database migrations required
-- Password authentication is optional
-- Existing deployments continue working without changes
+No external dependencies. Use existing libraries:
+- `crypto/aes`, `crypto/cipher`
+- `golang.org/x/crypto/pbkdf2`
+- `gorm.io/gorm`
 
 ---
 
-## Integration Status
+## Files to Create/Modify
 
-All three branches merged into `main` successfully:
-1. Backend (feature/password-backend)
-2. Docs (feature/password-docs)
-3. Frontend (feature/password-frontend)
+### Create:
+- `hscontrol/headplane_settings.go` (~250 lines)
+- `hscontrol/headplane_settings_test.go` (~200 lines)
+
+### Modify:
+- `hscontrol/app.go` (register 3 new endpoints)
+- `hscontrol/headplane_auth.go` (password change, session enhancement)
+- `hscontrol/headplane_auth_test.go` (update for session enhancement)
+
+---
+
+## Testing
+
+```bash
+cd /home/denny/Project/headscale-settings-backend
+
+# Run backend tests
+go test ./hscontrol -v -run TestHeadplane
+
+# Run all tests
+go test ./...
+
+# Check coverage
+go test -cover ./hscontrol
+```
+
+---
+
+## Acceptance Criteria
+
+- [ ] `headplane_settings` SQLite table created
+- [ ] API key encrypted with AES-256-GCM
+- [ ] `GET /api/v1/headplane/settings` returns decrypted settings
+- [ ] `POST /api/v1/headplane/settings` updates and encrypts
+- [ ] `POST /api/v1/headplane/change-password` validates and changes password
+- [ ] Session loads stored API key automatically
+- [ ] All unit tests pass
+- [ ] No regressions in Phase 13a functionality
+
+---
+
+## Coordination with Other Agents
+
+### With Frontend Agent:
+- **API Contract:** Share OpenAPI spec or endpoint signatures
+- **Mock Endpoints:** Frontend can mock these endpoints initially
+- **Integration Testing:** After both complete, test end-to-end
+
+### With Docs Agent:
+- **API Documentation:** Provide endpoint details for docs
+- **Security Notes:** Explain encryption approach
+
+---
+
+## Completion
+
+When done:
+1. Run all tests and verify they pass
+2. Commit your changes
+3. Push branch: `git push -u origin feature/settings-backend`
+4. Create summary: list files changed, tests added, commit SHA
+5. Report completion with merge readiness
+
+**Do not merge yet.** Integration testing happens after all agents complete.
 
 ---
 
 ## References
 
-- Backend: `hscontrol/headplane_auth.go`
-- Documentation: `docs/usage/authentication.md`
-- Frontend: See `PASSWORD_LOGIN_SUMMARY.md`
-- Roadmap: `ROADMAP.md` Phase 13
+- **Implementation Plan:** `docs/phase13b-implementation-plan.md`
+- **Phase 13a Auth:** `hscontrol/headplane_auth.go`
+- **Existing Tests:** `hscontrol/headplane_auth_test.go`
+- **ROADMAP:** `ROADMAP.md` Phase 13b
