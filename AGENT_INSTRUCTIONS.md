@@ -1,16 +1,17 @@
-# Phase 13c Task 2: Backend Per-User Settings
+# Phase 13c Task 3: Backend User Management API
 
-**Worktree:** `/home/denny/Project/headscale-multiuser-per-user-settings`  
-**Branch:** `feature/multiuser-per-user-settings`  
+**Worktree:** `/home/denny/Project/headscale-multiuser-user-mgmt-api`  
+**Branch:** `feature/multiuser-user-mgmt-api`  
 **Base Commit:** `880a8a7d9abb0cfb77fcb20e767aa67cee4cc02a`
 
 ## Objective
 
-Refactor settings storage from single-user to per-user:
-- Modify `headplane_settings` table to link to user ID
-- Update settings API endpoints to be user-aware
-- Migrate existing single-user settings to default admin user
-- Each user gets their own API key, theme, profile
+Add comprehensive user management API endpoints:
+- List all users (admin-only)
+- Get user by ID (admin-only)
+- Update user (admin-only, change username/role)
+- Delete user (admin-only)
+- Optional: Avatar upload endpoint
 
 ## Dependencies
 
@@ -18,80 +19,62 @@ Refactor settings storage from single-user to per-user:
 
 ## Context
 
-- Phase 13b has single-user settings in `headplane_settings` table
-- Current schema has single-row constraint (id=1)
-- Need to change to multi-row, keyed by user_id
+Task 1 provides basic RegisterUser/ListUsers/DeleteUser functions. This task adds:
+- Full CRUD API endpoints
+- Admin authorization checks
+- Optional avatar support
 
-## Schema Changes
+## API Endpoints
 
-**Before:**
-```sql
-CREATE TABLE headplane_settings (
-  id INTEGER PRIMARY KEY CHECK (id = 1),
-  api_key_encrypted TEXT,
-  ...
-);
-```
+1. **GET /api/v1/headplane/users** - List all users (admin-only)
+2. **GET /api/v1/headplane/users/:id** - Get user by ID (admin-only)
+3. **PUT /api/v1/headplane/users/:id** - Update user (admin-only)
+4. **DELETE /api/v1/headplane/users/:id** - Delete user (admin-only)
+5. **POST /api/v1/headplane/users/:id/avatar** - Upload avatar (optional)
 
-**After:**
-```sql
-CREATE TABLE headplane_settings (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER UNIQUE NOT NULL,
-  api_key_encrypted TEXT,
-  api_key_salt TEXT,
-  theme TEXT DEFAULT 'light',
-  profile_name TEXT,
-  updated_at TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES headplane_users(id) ON DELETE CASCADE
-);
-```
+## Authorization
 
-## Key Changes
+All endpoints require:
+- Valid session token
+- Authenticated user has `role = 'admin'`
 
-1. Remove single-row constraint
-2. Add `user_id` column with UNIQUE constraint
-3. Add foreign key to `headplane_users`
-4. Update GetSettings/UpdateSettings to filter by user_id
-5. Migrate existing settings row to admin user (id=1)
+Return 403 Forbidden if not admin.
+
+## Files to Create
+
+- `hscontrol/api/v1/headplane_users.go` - User management handlers
 
 ## Files to Modify
 
-- `hscontrol/headplane_settings.go` - Add user_id parameter
-- `hscontrol/db/db.go` - Migration for schema change
-- `hscontrol/headplane_settings_test.go` - Update tests
-- `hscontrol/app.go` - Update endpoint handlers
+- `hscontrol/app.go` - Register endpoints
+- `hscontrol/headplane_users.go` - Add UpdateUser, GetUser functions
+- Tests
 
 ## Implementation Steps
 
-1. Add migration to modify headplane_settings table
-2. Update HeadplaneSettings struct with UserID field
-3. Modify GetSettings(userID) and UpdateSettings(userID, ...)
-4. Update API handlers to extract user ID from session
-5. Migrate existing settings row to user_id=1 (admin)
-6. Update all tests for multi-user settings
+1. Implement admin authorization middleware
+2. Add GetUser(id) function
+3. Add UpdateUser(id, username, role) function
+4. Create API handlers for GET/PUT/DELETE
+5. Add comprehensive tests
+6. Optional: Add avatar upload support
 
 ## Testing
 
 ```bash
-cd /home/denny/Project/headscale-multiuser-per-user-settings
-go test ./hscontrol -v -run TestHeadplaneSettings
-go test ./...
+cd /home/denny/Project/headscale-multiuser-user-mgmt-api
+go test ./hscontrol -v -run TestHeadplaneUserManagement
 ```
 
 ## Acceptance Criteria
 
-- [ ] Settings table has user_id column
-- [ ] Foreign key to headplane_users
-- [ ] Each user has independent settings
-- [ ] Settings API filtered by authenticated user
-- [ ] Existing settings migrated to admin
+- [ ] List/get/update/delete user endpoints
+- [ ] Admin-only authorization enforced
+- [ ] Cannot delete last admin user
 - [ ] All tests pass
 
 ## Completion
 
-1. Run tests
-2. Commit and push: `git push -u origin feature/multiuser-per-user-settings`
-3. Report completion
+Push: `git push -u origin feature/multiuser-user-mgmt-api`
 
-**Do not merge** until Task 1 is merged and this is reviewed.
+**Do not merge** until Task 1 is merged.

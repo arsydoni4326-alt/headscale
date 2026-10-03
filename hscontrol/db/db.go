@@ -727,40 +727,54 @@ WHERE tags IS NOT NULL AND tags != '[]' AND tags != '' AND tags != 'null'
 				},
 				Rollback: func(db *gorm.DB) error { return nil },
 			},
-		// 0.30: unified credentials table (InitSchema keeps ensureCredentialsTable).
-		// TODO(kradalby): remove in 0.31 with the credentials migration.
-		{
-			// Create the unified credentials table; the next migration
-			// backfills it. Explicit DDL for both dialects (no AutoMigrate).
-			ID:       "202609231200-create-credentials",
-			Migrate:  ensureCredentialsTable,
-			Rollback: func(db *gorm.DB) error { return nil },
-		},
-		{
-			// Move every credential into the unified table and drop the
-			// per-kind tables (see migrateToCredentials).
-			ID: "202609231300-migrate-to-credentials",
-			Migrate: func(tx *gorm.DB) error {
-				// Already migrated (e.g. fresh DB via InitSchema): nothing to do.
-				if !tx.Migrator().HasTable("pre_auth_keys") &&
-					!tx.Migrator().HasTable("api_keys") {
-					return nil
-				}
+			// 0.30: unified credentials table (InitSchema keeps ensureCredentialsTable).
+			// TODO(kradalby): remove in 0.31 with the credentials migration.
+			{
+				// Create the unified credentials table; the next migration
+				// backfills it. Explicit DDL for both dialects (no AutoMigrate).
+				ID:       "202609231200-create-credentials",
+				Migrate:  ensureCredentialsTable,
+				Rollback: func(db *gorm.DB) error { return nil },
+			},
+			{
+				// Move every credential into the unified table and drop the
+				// per-kind tables (see migrateToCredentials).
+				ID: "202609231300-migrate-to-credentials",
+				Migrate: func(tx *gorm.DB) error {
+					// Already migrated (e.g. fresh DB via InitSchema): nothing to do.
+					if !tx.Migrator().HasTable("pre_auth_keys") &&
+						!tx.Migrator().HasTable("api_keys") {
+						return nil
+					}
 
-				return tx.Transaction(migrateToCredentials)
+					return tx.Transaction(migrateToCredentials)
+				},
+				Rollback: func(db *gorm.DB) error { return nil },
 			},
-			Rollback: func(db *gorm.DB) error { return nil },
-		},
-		{
-			// Add webhooks table for monitoring/alerting integrations.
-			// Webhooks can be configured to receive HTTP POST notifications
-			// for events like node up/down, health check failures, and alerts.
-			ID: "202609301000-create-webhooks-table",
-			Migrate: func(tx *gorm.DB) error {
-				return ensureWebhooksTable(tx)
+			{
+				// Add webhooks table for monitoring/alerting integrations.
+				// Webhooks can be configured to receive HTTP POST notifications
+				// for events like node up/down, health check failures, and alerts.
+				ID: "202609301000-create-webhooks-table",
+				Migrate: func(tx *gorm.DB) error {
+					return ensureWebhooksTable(tx)
+				},
+				Rollback: func(tx *gorm.DB) error {
+					return tx.Migrator().DropTable(&types.Webhook{})
+				},
 			},
-			Rollback: func(tx *gorm.DB) error {
-				return tx.Migrator().DropTable(&types.Webhook{})
+			{
+				// Add headplane_users table for multi-user Headplane authentication.
+				// This enables multiple users to log in to the Headplane UI with
+				// individual credentials (username + password) and role-based access.
+				// Migration auto-creates an admin user from the existing config password.
+				ID: "202610031721-create-headplane-users",
+				Migrate: func(tx *gorm.DB) error {
+					return ensureHeadplaneUsersTable(tx, cfg)
+				},
+				Rollback: func(tx *gorm.DB) error {
+					return tx.Migrator().DropTable(&HeadplaneUser{})
+				},
 			},
 		},
 		{
