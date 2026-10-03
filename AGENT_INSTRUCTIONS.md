@@ -1,109 +1,75 @@
-# Phase 13c Task 1: Backend User Model & Auth
+# Phase 13c Task 4: Frontend Multi-User Login
 
-**Worktree:** `/home/denny/Project/headscale-multiuser-backend-auth`  
-**Branch:** `feature/multiuser-backend-auth`  
+**Worktree:** `/home/denny/Project/headscale-multiuser-frontend-login`  
+**Branch:** `feature/multiuser-frontend-login`  
 **Base Commit:** `880a8a7d9abb0cfb77fcb20e767aa67cee4cc02a`
 
 ## Objective
 
-Implement foundational multi-user backend:
-- Add `headplane_users` table for multiple user accounts
-- Migrate single-user data to new schema
-- Implement user registration (admin-only)
-- Implement multi-user login with username/password
-- Session management with user ID
-- Password hashing with bcrypt
-- Comprehensive tests
+Update Headplane login UI for multi-user:
+- Add username field to login form
+- Update API calls to send username + password
+- Handle session for authenticated user
+- Show username in UI after login
+
+## Dependencies
+
+**Blocked until Task 1 (Backend User Model & Auth) is merged.**
 
 ## Context
 
-- Phase 13a complete: single-user password auth exists
-- Phase 13b complete: single-user settings storage exists
-- This task enables multiple users with individual credentials
-- Must preserve backward compatibility
+Current login (Phase 13a):
+- Single password field
+- POST /api/v1/headplane/login with `{password}`
 
-## Database Schema
-
-```sql
-CREATE TABLE headplane_users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  username TEXT UNIQUE NOT NULL,
-  password_hash TEXT NOT NULL,
-  role TEXT DEFAULT 'user',
-  created_at TIMESTAMP,
-  updated_at TIMESTAMP
-);
-```
-
-## Key Changes
-
-1. **New table**: `headplane_users` with username, password_hash, role
-2. **Migration**: Auto-create admin user from config password on first startup
-3. **Login**: Change from `{password}` to `{username, password}`
-4. **Session**: Store user ID, not just token
-5. **Endpoints**: 
-   - POST /api/v1/headplane/register (admin-only)
-   - GET /api/v1/headplane/users (admin-only)
-   - DELETE /api/v1/headplane/users/:id (admin-only)
-
-## Files to Create
-
-- `hscontrol/db/headplane_users.go` - Schema definition
-- `hscontrol/headplane_users.go` - CRUD functions
-- `hscontrol/headplane_users_test.go` - Tests
+New login:
+- Username + password fields
+- POST /api/v1/headplane/login with `{username, password}`
 
 ## Files to Modify
 
-- `hscontrol/headplane_auth.go` - Multi-user login logic
-- `hscontrol/app.go` - Register endpoints
-- `hscontrol/db/db.go` - Auto-migrate table
+- `headplane/app/routes/auth/login/action.ts` - Update API call
+- `headplane/app/routes/auth/login/route.tsx` - Add username field
+- `headplane/app/server/headscale/api/` - Update API client
+- Tests
 
 ## Implementation Steps
 
-1. Define HeadplaneUser struct in db/headplane_users.go
-2. Add auto-migration in db/db.go
-3. Create migration function for single→multi user
-4. Implement RegisterUser, ListUsers, DeleteUser
-5. Update login handler for username/password
-6. Update session to store user ID
-7. Add admin-only middleware for user management
-8. Write comprehensive tests
+1. Add username input field to login form
+2. Update form validation for username
+3. Update login API call to include username
+4. Store username in session/context after login
+5. Display username in header/nav
+6. Update tests
+
+## UI Changes
+
+**Login Form:**
+```
+Username: [__________]
+Password: [__________]
+[ ] Remember me
+[Login]
+```
 
 ## Testing
 
 ```bash
-cd /home/denny/Project/headscale-multiuser-backend-auth
-go test ./hscontrol -v -run TestHeadplane
-go test ./...
+cd /home/denny/Project/headscale-multiuser-frontend-login/headplane
+pnpm test
+pnpm typecheck
 ```
 
 ## Acceptance Criteria
 
-- [ ] `headplane_users` table created
-- [ ] Bcrypt password hashing (cost 12)
-- [ ] User registration endpoint works
-- [ ] Multi-user login with username/password
-- [ ] Session stores user ID
-- [ ] List/delete users endpoints
-- [ ] Auto-migration from single-user
-- [ ] All tests pass
-- [ ] No regressions
-
-## Dependencies
-
-**This is the foundational task.** All other Phase 13c tasks depend on this being merged first.
+- [ ] Username field in login form
+- [ ] Login works with username + password
+- [ ] Username displayed after login
+- [ ] Tests pass
+- [ ] Typecheck passes
 
 ## Completion
 
-1. Run all tests
-2. Commit changes
-3. Push: `git push -u origin feature/multiuser-backend-auth`
-4. Report completion
+Push: `git push -u origin feature/multiuser-frontend-login`
 
-**Do not merge.** Must be reviewed first.
-
-## References
-
-- `hscontrol/headplane_auth.go` - Current auth
-- `hscontrol/headplane_settings.go` - Settings storage
-- `ROADMAP.md` Phase 13c
+**Do not merge** until Task 1 is merged.
