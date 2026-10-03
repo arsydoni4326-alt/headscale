@@ -33,10 +33,10 @@ var (
 	errInvalidCurrentPassword = errors.New("invalid current password")
 )
 
-// HeadplaneSettings stores user settings for Headplane UI.
-// This is a single-row table (enforced by CHECK constraint).
+// HeadplaneSettings stores per-user settings for Headplane UI.
 type HeadplaneSettings struct {
-	ID              int       `gorm:"primaryKey;check:id = 1"`
+	ID              uint      `gorm:"primaryKey"`
+	UserID          uint      `gorm:"uniqueIndex;not null"`
 	APIKeyEncrypted string    `gorm:"column:api_key_encrypted"`
 	APIKeyNonce     string    `gorm:"column:api_key_nonce"`
 	APIKeySalt      string    `gorm:"column:api_key_salt"` // PBKDF2 salt
@@ -158,33 +158,61 @@ func decryptAPIKey(encrypted, nonce, salt, sessionToken string) (string, error) 
 	return string(plaintext), nil
 }
 
-// GetSettings retrieves the settings from the database.
-func GetSettings(db *gorm.DB) (*HeadplaneSettings, error) {
+// GetSettings retrieves the settings for a specific user from the database.
+// If no settings exist for the user, they are automatically created with defaults.
+func GetSettings(db *gorm.DB, userID uint) (*HeadplaneSettings, error) {
 	var settings HeadplaneSettings
-	err := db.First(&settings, 1).Error
+	err := db.Where("user_id = ?", userID).First(&settings).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errSettingsNotFound
+			// Auto-create settings for the user with defaults
+			settings = HeadplaneSettings{
+				UserID:      userID,
+				Theme:       "light",
+				ProfileName: "",
+			}
+			if err := db.Create(&settings).Error; err != nil {
+				return nil, err
+			}
+			return &settings, nil
 		}
 		return nil, err
 	}
 	return &settings, nil
 }
 
-// UpdateSettings creates or updates settings in the database.
-func UpdateSettings(db *gorm.DB, apiKeyEncrypted, apiKeyNonce, apiKeySalt, theme, profileName string) error {
-	settings := HeadplaneSettings{
-		ID:              1, // Single row
-		APIKeyEncrypted: apiKeyEncrypted,
-		APIKeyNonce:     apiKeyNonce,
-		APIKeySalt:      apiKeySalt,
-		Theme:           theme,
-		ProfileName:     profileName,
-		UpdatedAt:       time.Now(),
+// UpdateSettings updates the settings for a specific user in the database.
+// If no settings exist for the user, they are created.
+func UpdateSettings(db *gorm.DB, userID uint, apiKeyEncrypted, apiKeyNonce, apiKeySalt, theme, profileName string) error {
+	// First, check if settings exist
+	var existing HeadplaneSettings
+	err := db.Where("user_id = ?", userID).First(&existing).Error
+	
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		// Create new settings
+		settings := HeadplaneSettings{
+			UserID:          userID,
+			APIKeyEncrypted: apiKeyEncrypted,
+			APIKeyNonce:     apiKeyNonce,
+			APIKeySalt:      apiKeySalt,
+			Theme:           theme,
+			ProfileName:     profileName,
+		}
+		return db.Create(&settings).Error
 	}
-
-	// Use UPSERT: create if not exists, update if exists
-	return db.Save(&settings).Error
+	
+	if err != nil {
+		return err
+	}
+	
+	// Update existing settings
+	return db.Model(&existing).Updates(map[string]interface{}{
+		"api_key_encrypted": apiKeyEncrypted,
+		"api_key_nonce":     apiKeyNonce,
+		"api_key_salt":      apiKeySalt,
+		"theme":             theme,
+		"profile_name":      profileName,
+	}).Error
 }
 
 // InitHeadplaneSettings creates the headplane_settings table if it doesn't exist.
@@ -199,7 +227,7 @@ func (h *Headscale) HandleGetSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify session
+	// Verify session and get user ID
 	token := r.Header.Get("Authorization")
 	if token == "" {
 		// Try cookie
@@ -214,19 +242,16 @@ func (h *Headscale) HandleGetSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get settings from database
-	settings, err := GetSettings(h.state.DB().DB)
+	// Get session to extract user ID
+	session, ok := h.headplaneAuth.GetSession(token)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Get settings from database for this user (auto-creates if not found)
+	settings, err := GetSettings(h.state.DB().DB, session.UserID)
 	if err != nil {
-		if errors.Is(err, errSettingsNotFound) {
-			// Return empty settings if none exist
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(SettingsResponse{
-				APIKey:      "",
-				Theme:       "light",
-				ProfileName: "",
-			})
-			return
-		}
 		log.Error().Err(err).Msg("Failed to get settings")
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
@@ -261,7 +286,7 @@ func (h *Headscale) HandleUpdateSettings(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Verify session
+	// Verify session and get user ID
 	token := r.Header.Get("Authorization")
 	if token == "" {
 		// Try cookie
@@ -276,6 +301,13 @@ func (h *Headscale) HandleUpdateSettings(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Get session to extract user ID
+	session, ok := h.headplaneAuth.GetSession(token)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	// Parse request
 	var req UpdateSettingsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -283,28 +315,20 @@ func (h *Headscale) HandleUpdateSettings(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Get current settings (or defaults)
-	currentSettings, err := GetSettings(h.state.DB().DB)
-	if err != nil && !errors.Is(err, errSettingsNotFound) {
+	// Get current settings (auto-creates with defaults if not found)
+	currentSettings, err := GetSettings(h.state.DB().DB, session.UserID)
+	if err != nil {
 		log.Error().Err(err).Msg("Failed to get current settings")
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	// Set defaults if no settings exist
-	apiKeyEncrypted := ""
-	apiKeyNonce := ""
-	apiKeySalt := ""
-	theme := "light"
-	profileName := ""
-
-	if currentSettings != nil {
-		apiKeyEncrypted = currentSettings.APIKeyEncrypted
-		apiKeyNonce = currentSettings.APIKeyNonce
-		apiKeySalt = currentSettings.APIKeySalt
-		theme = currentSettings.Theme
-		profileName = currentSettings.ProfileName
-	}
+	// Start with current values
+	apiKeyEncrypted := currentSettings.APIKeyEncrypted
+	apiKeyNonce := currentSettings.APIKeyNonce
+	apiKeySalt := currentSettings.APIKeySalt
+	theme := currentSettings.Theme
+	profileName := currentSettings.ProfileName
 
 	// Update API key if provided
 	if req.APIKey != nil {
@@ -338,14 +362,14 @@ func (h *Headscale) HandleUpdateSettings(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Save to database
-	err = UpdateSettings(h.state.DB().DB, apiKeyEncrypted, apiKeyNonce, apiKeySalt, theme, profileName)
+	err = UpdateSettings(h.state.DB().DB, session.UserID, apiKeyEncrypted, apiKeyNonce, apiKeySalt, theme, profileName)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to update settings")
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	log.Info().Msg("Settings updated successfully")
+	log.Info().Uint("user_id", session.UserID).Msg("Settings updated successfully")
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"success": true})
 }

@@ -1,16 +1,16 @@
-# Phase 13c Task 4: Frontend Multi-User Login
+# Phase 13c Task 2: Backend Per-User Settings
 
-**Worktree:** `/home/denny/Project/headscale-multiuser-frontend-login`  
-**Branch:** `feature/multiuser-frontend-login`  
+**Worktree:** `/home/denny/Project/headscale-multiuser-per-user-settings`  
+**Branch:** `feature/multiuser-per-user-settings`  
 **Base Commit:** `880a8a7d9abb0cfb77fcb20e767aa67cee4cc02a`
 
 ## Objective
 
-Update Headplane login UI for multi-user:
-- Add username field to login form
-- Update API calls to send username + password
-- Handle session for authenticated user
-- Show username in UI after login
+Refactor settings storage from single-user to per-user:
+- Modify `headplane_settings` table to link to user ID
+- Update settings API endpoints to be user-aware
+- Migrate existing single-user settings to default admin user
+- Each user gets their own API key, theme, profile
 
 ## Dependencies
 
@@ -18,58 +18,80 @@ Update Headplane login UI for multi-user:
 
 ## Context
 
-Current login (Phase 13a):
-- Single password field
-- POST /api/v1/headplane/login with `{password}`
+- Phase 13b has single-user settings in `headplane_settings` table
+- Current schema has single-row constraint (id=1)
+- Need to change to multi-row, keyed by user_id
 
-New login:
-- Username + password fields
-- POST /api/v1/headplane/login with `{username, password}`
+## Schema Changes
+
+**Before:**
+```sql
+CREATE TABLE headplane_settings (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  api_key_encrypted TEXT,
+  ...
+);
+```
+
+**After:**
+```sql
+CREATE TABLE headplane_settings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER UNIQUE NOT NULL,
+  api_key_encrypted TEXT,
+  api_key_salt TEXT,
+  theme TEXT DEFAULT 'light',
+  profile_name TEXT,
+  updated_at TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES headplane_users(id) ON DELETE CASCADE
+);
+```
+
+## Key Changes
+
+1. Remove single-row constraint
+2. Add `user_id` column with UNIQUE constraint
+3. Add foreign key to `headplane_users`
+4. Update GetSettings/UpdateSettings to filter by user_id
+5. Migrate existing settings row to admin user (id=1)
 
 ## Files to Modify
 
-- `headplane/app/routes/auth/login/action.ts` - Update API call
-- `headplane/app/routes/auth/login/route.tsx` - Add username field
-- `headplane/app/server/headscale/api/` - Update API client
-- Tests
+- `hscontrol/headplane_settings.go` - Add user_id parameter
+- `hscontrol/db/db.go` - Migration for schema change
+- `hscontrol/headplane_settings_test.go` - Update tests
+- `hscontrol/app.go` - Update endpoint handlers
 
 ## Implementation Steps
 
-1. Add username input field to login form
-2. Update form validation for username
-3. Update login API call to include username
-4. Store username in session/context after login
-5. Display username in header/nav
-6. Update tests
-
-## UI Changes
-
-**Login Form:**
-```
-Username: [__________]
-Password: [__________]
-[ ] Remember me
-[Login]
-```
+1. Add migration to modify headplane_settings table
+2. Update HeadplaneSettings struct with UserID field
+3. Modify GetSettings(userID) and UpdateSettings(userID, ...)
+4. Update API handlers to extract user ID from session
+5. Migrate existing settings row to user_id=1 (admin)
+6. Update all tests for multi-user settings
 
 ## Testing
 
 ```bash
-cd /home/denny/Project/headscale-multiuser-frontend-login/headplane
-pnpm test
-pnpm typecheck
+cd /home/denny/Project/headscale-multiuser-per-user-settings
+go test ./hscontrol -v -run TestHeadplaneSettings
+go test ./...
 ```
 
 ## Acceptance Criteria
 
-- [ ] Username field in login form
-- [ ] Login works with username + password
-- [ ] Username displayed after login
-- [ ] Tests pass
-- [ ] Typecheck passes
+- [ ] Settings table has user_id column
+- [ ] Foreign key to headplane_users
+- [ ] Each user has independent settings
+- [ ] Settings API filtered by authenticated user
+- [ ] Existing settings migrated to admin
+- [ ] All tests pass
 
 ## Completion
 
-Push: `git push -u origin feature/multiuser-frontend-login`
+1. Run tests
+2. Commit and push: `git push -u origin feature/multiuser-per-user-settings`
+3. Report completion
 
-**Do not merge** until Task 1 is merged.
+**Do not merge** until Task 1 is merged and this is reviewed.
