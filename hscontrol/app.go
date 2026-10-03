@@ -203,7 +203,7 @@ func NewHeadscale(cfg *types.Config) (*Headscale, error) {
 	app.authProvider = authProvider
 
 	// Initialize Headplane password authentication
-	app.headplaneAuth = NewHeadplaneAuth(cfg)
+	app.headplaneAuth = NewHeadplaneAuth(cfg, s.DB())
 
 	if app.cfg.TailcfgDNSConfig != nil && app.cfg.TailcfgDNSConfig.Proxied { // if MagicDNS
 		// TODO(kradalby): revisit why this takes a list.
@@ -529,6 +529,10 @@ func (h *Headscale) createRouter(apiV1Mux, apiV2Mux http.Handler) *chi.Mux {
 		r.Get("/v1/headplane/settings", h.HandleGetSettings)
 		r.Post("/v1/headplane/settings", h.HandleUpdateSettings)
 		r.Post("/v1/headplane/change-password", h.HandleChangePassword)
+		// Headplane user management endpoints (require admin session)
+		r.Post("/v1/headplane/users", h.HandleRegisterUser)
+		r.Get("/v1/headplane/users", h.HandleListUsers)
+		r.Delete("/v1/headplane/users/{id}", h.HandleDeleteUser)
 	})
 	// Ping response endpoint: receives HEAD from clients responding
 	// to a [tailcfg.PingRequest]. The unguessable ping ID serves as authentication.

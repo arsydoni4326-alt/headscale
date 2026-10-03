@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/juanfont/headscale/hscontrol/db"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/pbkdf2"
 	"gorm.io/gorm"
@@ -378,8 +379,23 @@ func (h *Headscale) HandleChangePassword(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Get the session to identify the user
+	session, ok := h.headplaneAuth.GetSession(token)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Get user from database
+	user, err := db.GetHeadplaneUserByID(h.state.DB().DB, session.UserID)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to get user for password change")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
 	// Validate current password
-	if !h.headplaneAuth.verifyPassword(req.CurrentPassword) {
+	if !user.CheckPassword(req.CurrentPassword) {
 		log.Warn().Msg("Password change failed: invalid current password")
 		http.Error(w, "Invalid current password", http.StatusUnauthorized)
 		return
@@ -391,12 +407,15 @@ func (h *Headscale) HandleChangePassword(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Update password in config (in-memory)
-	// Note: This does not persist to the config file automatically.
-	// The config file would need to be rewritten or the password could be set via environment variable.
-	h.cfg.Headplane.Password = req.NewPassword
+	// Update password in database
+	err = db.UpdateHeadplaneUserPassword(h.state.DB().DB, session.UserID, req.NewPassword)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to update password")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
 
-	log.Info().Msg("Password changed successfully")
+	log.Info().Str("username", session.Username).Msg("Password changed successfully")
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"success": true})
 }

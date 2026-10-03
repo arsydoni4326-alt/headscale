@@ -763,6 +763,19 @@ WHERE tags IS NOT NULL AND tags != '[]' AND tags != '' AND tags != 'null'
 				return tx.Migrator().DropTable(&types.Webhook{})
 			},
 		},
+		{
+			// Add headplane_users table for multi-user Headplane authentication.
+			// This enables multiple users to log in to the Headplane UI with
+			// individual credentials (username + password) and role-based access.
+			// Migration auto-creates an admin user from the existing config password.
+			ID: "202610031721-create-headplane-users",
+			Migrate: func(tx *gorm.DB) error {
+				return ensureHeadplaneUsersTable(tx, cfg)
+			},
+			Rollback: func(tx *gorm.DB) error {
+				return tx.Migrator().DropTable(&HeadplaneUser{})
+			},
+		},
 		},
 	)
 
@@ -1125,4 +1138,37 @@ func Write[T any](db *gorm.DB, fn func(tx *gorm.DB) (T, error)) (T, error) {
 	}
 
 	return ret, tx.Commit().Error
+}
+
+// ensureHeadplaneUsersTable creates the headplane_users table and migrates
+// the existing single-user password to a default admin user.
+func ensureHeadplaneUsersTable(tx *gorm.DB, cfg *types.Config) error {
+	if tx.Migrator().HasTable(&HeadplaneUser{}) {
+		return nil
+	}
+
+	// Create table using AutoMigrate
+	if err := tx.AutoMigrate(&HeadplaneUser{}); err != nil {
+		return fmt.Errorf("creating headplane_users table: %w", err)
+	}
+
+	// Check if there's an existing password in config to migrate
+	if cfg.Headplane.Password != "" {
+		// Check if any users already exist (shouldn't happen, but be safe)
+		var count int64
+		if err := tx.Model(&HeadplaneUser{}).Count(&count).Error; err != nil {
+			return fmt.Errorf("counting headplane users: %w", err)
+		}
+
+		if count == 0 {
+			// Create default admin user with the password from config
+			_, err := CreateHeadplaneUser(tx, "admin", cfg.Headplane.Password, "admin")
+			if err != nil {
+				return fmt.Errorf("creating default admin user: %w", err)
+			}
+			log.Info().Msg("Created default admin user from config password")
+		}
+	}
+
+	return nil
 }
