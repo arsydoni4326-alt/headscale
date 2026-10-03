@@ -68,6 +68,7 @@ Please have a look at the [`documentation`](https://headscale.net/stable/).
 Headscale supports multiple authentication methods:
 
 - **Password Authentication** — Simple password-based login for Headplane web UI access
+- **Settings Menu** — Manage API key storage, password changes, theme preferences, and profile after login
 - **API Keys** — Token-based authentication for programmatic API access and automation
 
 See the [Authentication Guide](https://headscale.net/stable/usage/authentication/) for complete setup instructions.

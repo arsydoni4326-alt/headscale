@@ -322,7 +322,24 @@ Both authentication methods work simultaneously. Password authentication does no
 
 ---
 
+## Settings and API Key Storage
+
+After logging in with your password, you can save your Headscale API key in Settings to avoid re-entering it at each login:
+
+1. Log in to Headplane with your password
+2. Navigate to **Settings** in the navigation bar (top-right)
+3. Go to **Settings → Integration**
+4. Enter your Headscale API key (generate one with `headscale apikeys create`)
+5. Click **Save**
+
+Your API key will be stored securely (encrypted with AES-256-GCM) and reused across sessions. You can also change your password, select a theme preference, and set a display name in Settings.
+
+See the [Settings Guide](settings.md) for complete documentation on managing your Headplane settings.
+
+---
+
 ## Related Documentation
+
 
 - [Configuration Reference](../ref/configuration.md) — Complete configuration options
 - [API Reference](../ref/api.md) — REST API documentation
