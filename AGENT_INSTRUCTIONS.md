@@ -1,109 +1,80 @@
-# Phase 13c Task 1: Backend User Model & Auth
+# Phase 13c Task 3: Backend User Management API
 
-**Worktree:** `/home/denny/Project/headscale-multiuser-backend-auth`  
-**Branch:** `feature/multiuser-backend-auth`  
+**Worktree:** `/home/denny/Project/headscale-multiuser-user-mgmt-api`  
+**Branch:** `feature/multiuser-user-mgmt-api`  
 **Base Commit:** `880a8a7d9abb0cfb77fcb20e767aa67cee4cc02a`
 
 ## Objective
 
-Implement foundational multi-user backend:
-- Add `headplane_users` table for multiple user accounts
-- Migrate single-user data to new schema
-- Implement user registration (admin-only)
-- Implement multi-user login with username/password
-- Session management with user ID
-- Password hashing with bcrypt
-- Comprehensive tests
+Add comprehensive user management API endpoints:
+- List all users (admin-only)
+- Get user by ID (admin-only)
+- Update user (admin-only, change username/role)
+- Delete user (admin-only)
+- Optional: Avatar upload endpoint
+
+## Dependencies
+
+**Blocked until Task 1 (Backend User Model & Auth) is merged.**
 
 ## Context
 
-- Phase 13a complete: single-user password auth exists
-- Phase 13b complete: single-user settings storage exists
-- This task enables multiple users with individual credentials
-- Must preserve backward compatibility
+Task 1 provides basic RegisterUser/ListUsers/DeleteUser functions. This task adds:
+- Full CRUD API endpoints
+- Admin authorization checks
+- Optional avatar support
 
-## Database Schema
+## API Endpoints
 
-```sql
-CREATE TABLE headplane_users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  username TEXT UNIQUE NOT NULL,
-  password_hash TEXT NOT NULL,
-  role TEXT DEFAULT 'user',
-  created_at TIMESTAMP,
-  updated_at TIMESTAMP
-);
-```
+1. **GET /api/v1/headplane/users** - List all users (admin-only)
+2. **GET /api/v1/headplane/users/:id** - Get user by ID (admin-only)
+3. **PUT /api/v1/headplane/users/:id** - Update user (admin-only)
+4. **DELETE /api/v1/headplane/users/:id** - Delete user (admin-only)
+5. **POST /api/v1/headplane/users/:id/avatar** - Upload avatar (optional)
 
-## Key Changes
+## Authorization
 
-1. **New table**: `headplane_users` with username, password_hash, role
-2. **Migration**: Auto-create admin user from config password on first startup
-3. **Login**: Change from `{password}` to `{username, password}`
-4. **Session**: Store user ID, not just token
-5. **Endpoints**: 
-   - POST /api/v1/headplane/register (admin-only)
-   - GET /api/v1/headplane/users (admin-only)
-   - DELETE /api/v1/headplane/users/:id (admin-only)
+All endpoints require:
+- Valid session token
+- Authenticated user has `role = 'admin'`
+
+Return 403 Forbidden if not admin.
 
 ## Files to Create
 
-- `hscontrol/db/headplane_users.go` - Schema definition
-- `hscontrol/headplane_users.go` - CRUD functions
-- `hscontrol/headplane_users_test.go` - Tests
+- `hscontrol/api/v1/headplane_users.go` - User management handlers
 
 ## Files to Modify
 
-- `hscontrol/headplane_auth.go` - Multi-user login logic
 - `hscontrol/app.go` - Register endpoints
-- `hscontrol/db/db.go` - Auto-migrate table
+- `hscontrol/headplane_users.go` - Add UpdateUser, GetUser functions
+- Tests
 
 ## Implementation Steps
 
-1. Define HeadplaneUser struct in db/headplane_users.go
-2. Add auto-migration in db/db.go
-3. Create migration function for single→multi user
-4. Implement RegisterUser, ListUsers, DeleteUser
-5. Update login handler for username/password
-6. Update session to store user ID
-7. Add admin-only middleware for user management
-8. Write comprehensive tests
+1. Implement admin authorization middleware
+2. Add GetUser(id) function
+3. Add UpdateUser(id, username, role) function
+4. Create API handlers for GET/PUT/DELETE
+5. Add comprehensive tests
+6. Optional: Add avatar upload support
 
 ## Testing
 
 ```bash
-cd /home/denny/Project/headscale-multiuser-backend-auth
-go test ./hscontrol -v -run TestHeadplane
-go test ./...
+cd /home/denny/Project/headscale-multiuser-user-mgmt-api
+go test ./hscontrol -v -run TestHeadplaneUserManagement
 ```
 
 ## Acceptance Criteria
 
-- [ ] `headplane_users` table created
-- [ ] Bcrypt password hashing (cost 12)
-- [ ] User registration endpoint works
-- [ ] Multi-user login with username/password
-- [ ] Session stores user ID
-- [ ] List/delete users endpoints
-- [ ] Auto-migration from single-user
+- [ ] List/get/update/delete user endpoints
+- [ ] Admin-only authorization enforced
+- [ ] Cannot delete last admin user
 - [ ] All tests pass
-- [ ] No regressions
-
-## Dependencies
-
-**This is the foundational task.** All other Phase 13c tasks depend on this being merged first.
 
 ## Completion
 
-1. Run all tests
-2. Commit changes
-3. Push: `git push -u origin feature/multiuser-backend-auth`
-4. Report completion
+Push: `git push -u origin feature/multiuser-user-mgmt-api`
 
-**Do not merge.** Must be reviewed first.
-
-## References
-
-- `hscontrol/headplane_auth.go` - Current auth
-- `hscontrol/headplane_settings.go` - Settings storage
-- `ROADMAP.md` Phase 13c
+**Do not merge** until Task 1 is merged.

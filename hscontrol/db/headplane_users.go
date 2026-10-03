@@ -23,10 +23,10 @@ var (
 
 // HeadplaneUser represents a Headplane UI user with credentials and role.
 type HeadplaneUser struct {
-	ID           uint      `gorm:"primaryKey"`
-	Username     string    `gorm:"uniqueIndex;not null"`
-	PasswordHash string    `gorm:"not null"`
-	Role         string    `gorm:"default:'user'"`
+	ID           uint   `gorm:"primaryKey"`
+	Username     string `gorm:"uniqueIndex;not null"`
+	PasswordHash string `gorm:"not null"`
+	Role         string `gorm:"default:'user'"`
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }
@@ -158,4 +158,55 @@ func UpdateHeadplaneUserPassword(tx *gorm.DB, id uint, newPassword string) error
 	}
 
 	return tx.Model(user).Update("password_hash", user.PasswordHash).Error
+}
+
+// UpdateHeadplaneUser updates a user's username and/or role.
+func UpdateHeadplaneUser(tx *gorm.DB, id uint, username, role string) (*HeadplaneUser, error) {
+	user, err := GetHeadplaneUserByID(tx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	updates := make(map[string]interface{})
+
+	// Only update username if provided and different
+	if username != "" && username != user.Username {
+		// Check if new username is already taken
+		var existing HeadplaneUser
+		err := tx.Where("username = ? AND id != ?", username, id).First(&existing).Error
+		if err == nil {
+			return nil, ErrHeadplaneUserExists
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+		updates["username"] = username
+	}
+
+	// Only update role if provided and different
+	if role != "" && role != user.Role {
+		if role != "user" && role != "admin" {
+			return nil, errors.New("invalid role: must be 'user' or 'admin'")
+		}
+		updates["role"] = role
+	}
+
+	// If no updates, return current user
+	if len(updates) == 0 {
+		return user, nil
+	}
+
+	if err := tx.Model(user).Updates(updates).Error; err != nil {
+		return nil, err
+	}
+
+	// Reload user to get updated values
+	return GetHeadplaneUserByID(tx, id)
+}
+
+// CountAdminUsers returns the number of users with admin role.
+func CountAdminUsers(tx *gorm.DB) (int64, error) {
+	var count int64
+	err := tx.Model(&HeadplaneUser{}).Where("role = ?", "admin").Count(&count).Error
+	return count, err
 }

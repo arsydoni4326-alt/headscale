@@ -532,6 +532,8 @@ func (h *Headscale) createRouter(apiV1Mux, apiV2Mux http.Handler) *chi.Mux {
 		// Headplane user management endpoints (require admin session)
 		r.Post("/v1/headplane/users", h.HandleRegisterUser)
 		r.Get("/v1/headplane/users", h.HandleListUsers)
+		r.Get("/v1/headplane/users/{id}", h.HandleGetUser)
+		r.Put("/v1/headplane/users/{id}", h.HandleUpdateUser)
 		r.Delete("/v1/headplane/users/{id}", h.HandleDeleteUser)
 	})
 	// Ping response endpoint: receives HEAD from clients responding
