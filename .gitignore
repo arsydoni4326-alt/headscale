@@ -60,3 +60,5 @@ package-lock.json
 package.json
 .agents
 session.md
+INITIAL_PROMPT.md
+AGENT_INSTRUCTIONS.md
