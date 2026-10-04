@@ -622,6 +622,167 @@ The separation of concerns across all sub-phases:
 - **User logs into Headplane** with Headplane password, then configures Headscale
   API key in Settings so Headplane can interact with Headscale.
 
+## Phase 14 — Module Path Rewrite to `github.com/arsydoni4326-alt/headscale` [Planned]
+
+**Status:** Planned  
+**Priority:** High  
+**Impact:** Breaking change for internal imports and build tooling
+
+### Objective
+
+Rewrite the Go module path from `github.com/juanfont/headscale` to
+`github.com/arsydoni4326-alt/headscale` to properly reflect the fork's
+independent identity and fix version reporting issues in built binaries.
+
+### Motivation
+
+Currently, the Go module path still references the upstream repository, which
+causes:
+
+1. **Version reporting issues**: Build-time ldflags with
+   `-X 'github.com/arsydoni4326-alt/headscale/hscontrol/types.Version=...'`
+   fail to inject version information because the actual module path is
+   `github.com/juanfont/headscale`.
+2. **Import confusion**: Internal imports reference the upstream path, making
+   the fork's independence less clear.
+3. **Dependency management**: The module path doesn't match the repository URL,
+   which can cause issues with Go tooling and downstream consumers.
+
+### Implementation Plan
+
+#### Part 1: Preparation and Analysis [Planned]
+
+- [ ] Audit all Go source files for import statements referencing
+      `github.com/juanfont/headscale`
+- [ ] Identify all non-Go files that reference the module path:
+  - [ ] `Makefile` and build scripts
+  - [ ] `Dockerfile*` files (especially ldflags in build commands)
+  - [ ] CI/CD configuration files (`.github/workflows/*.yml`, `nix/` files)
+  - [ ] Documentation files (`docs/`, `README.md`, `CONTRIBUTING.md`)
+  - [ ] Test fixtures and integration test configurations
+  - [ ] `flake.nix` and Nix-related files
+  - [ ] `tools/bump` and other tooling scripts
+- [ ] Document the current module dependency graph to identify potential
+      downstream impact
+- [ ] Create a backup branch before starting the rewrite
+
+#### Part 2: Core Module Path Update [Planned]
+
+- [ ] Update `go.mod` module declaration to
+      `github.com/arsydoni4326-alt/headscale`
+- [ ] Run automated find-and-replace for all Go import statements:
+  ```bash
+  find . -name "*.go" -type f -exec sed -i \
+    's|github.com/juanfont/headscale|github.com/arsydoni4326-alt/headscale|g' {} +
+  ```
+- [ ] Update `go.sum` by running `go mod tidy`
+- [ ] Verify no references to the old path remain in Go files:
+  ```bash
+  grep -r "github.com/juanfont/headscale" --include="*.go"
+  ```
+
+#### Part 3: Build System and Tooling [Planned]
+
+- [ ] Update `Makefile` ldflags to use the new module path
+- [ ] Update all `Dockerfile*` files:
+  - [ ] Fix ldflags in `Dockerfile`
+  - [ ] Fix ldflags in `Dockerfile.debug`
+  - [ ] Fix ldflags in `Dockerfile.tailscale-HEAD`
+  - [ ] Fix ldflags in `Dockerfile.derper`
+- [ ] Update `cmd/headscale/headscale.go` if it contains version information
+- [ ] Update `tools/bump` and related tooling scripts
+- [ ] Update `flakehashes.json` by running `go run ./cmd/vendorhash update`
+- [ ] Update Nix files (`flake.nix`, `nix/*.nix`) if they reference the module
+      path
+
+#### Part 4: CI/CD and Testing [Planned]
+
+- [ ] Update GitHub Actions workflows (`.github/workflows/*.yml`)
+- [ ] Update integration test configurations (`integration/`, `cmd/hi/`)
+- [ ] Update Nix flake checks and builders
+- [ ] Run local build to verify:
+  ```bash
+  make clean
+  make build
+  ./headscale version  # should show correct version/commit
+  ```
+- [ ] Run unit tests: `make test`
+- [ ] Run integration tests: `go run ./cmd/hi doctor` and sample tests
+- [ ] Verify Nix build: `nix build`
+
+#### Part 5: Documentation and Communication [Planned]
+
+- [ ] Update `README.md` with the new module path for go get instructions
+- [ ] Update `CONTRIBUTING.md` with the new import path conventions
+- [ ] Update `docs/` documentation referencing the module path
+- [ ] Update `ARCHITECTURE.md` if it references the module structure
+- [ ] Update `SPECIFICATION.md` if it references the module path
+- [ ] Add a migration note to `CHANGELOG.md` under Breaking Changes
+- [ ] Update Headplane documentation if it references the backend module path
+
+#### Part 6: Verification and Release [Planned]
+
+- [ ] Build and test all binaries:
+  - [ ] `headscale version` reports correct version and commit
+  - [ ] Docker images build successfully
+  - [ ] Nix builds complete without errors
+- [ ] Run full integration test suite: `go run ./cmd/hi run --all`
+- [ ] Verify the update-check endpoint still works
+- [ ] Test Headplane integration with the updated backend
+- [ ] Create a release tag following the `-arsydoni4326-alt` convention
+- [ ] Communicate the change to any downstream consumers or collaborators
+
+### Risk Assessment
+
+- **High impact**: All Go imports change; automated tools required.
+- **Breaking change**: Downstream projects importing this fork as a library
+  will need to update their imports.
+- **Build tooling**: Requires careful coordination with Dockerfiles, Makefiles,
+  and CI/CD.
+- **Testing burden**: Must verify all build paths (native, Docker, Nix) and
+  all test suites.
+
+### Success Criteria
+
+1. ✅ `headscale version` command shows the correct version, commit, and build
+   date (not "version=dev commit=unknown")
+2. ✅ All unit tests pass
+3. ✅ All integration tests pass
+4. ✅ Docker builds complete successfully
+5. ✅ Nix builds complete successfully
+6. ✅ No grep matches for `github.com/juanfont/headscale` in Go files
+7. ✅ Documentation accurately reflects the new module path
+8. ✅ Update-check feature continues to work
+9. ✅ Headplane integration remains functional
+
+### Rollback Plan
+
+If critical issues arise:
+
+1. Revert to the backup branch created in Part 1
+2. Document the specific failure mode
+3. Re-plan with lessons learned
+
+### Dependencies
+
+- **Blocks**: None (this is an independent infrastructure change)
+- **Blocked by**: None
+- **Related**: This fixes the version reporting issue where ldflags fail to
+  inject version information due to module path mismatch
+
+### Estimated Timeline
+
+- Part 1 (Preparation): 1-2 hours
+- Part 2 (Core Update): 30 minutes
+- Part 3 (Build System): 1-2 hours
+- Part 4 (CI/CD and Testing): 2-3 hours
+- Part 5 (Documentation): 1-2 hours
+- Part 6 (Verification): 2-3 hours
+
+**Total estimated effort**: 8-13 hours
+
+---
+
 ## Tracking
 
 - Day-to-day work is tracked via GitHub issues on the fork repositories.
