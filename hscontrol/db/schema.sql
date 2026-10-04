@@ -134,3 +134,25 @@ CREATE TABLE webhooks(
 );
 CREATE UNIQUE INDEX idx_webhooks_name ON webhooks(name);
 CREATE INDEX idx_webhooks_deleted_at ON webhooks(deleted_at);
+
+CREATE TABLE headplane_users(
+  id integer PRIMARY KEY AUTOINCREMENT,
+  username text NOT NULL,
+  password_hash text NOT NULL,
+  role text DEFAULT "user",
+  created_at datetime,
+  updated_at datetime
+);
+CREATE UNIQUE INDEX idx_headplane_users_username ON headplane_users(username);
+
+CREATE TABLE headplane_settings(
+  id integer PRIMARY KEY AUTOINCREMENT,
+  user_id integer NOT NULL,
+  api_key_encrypted text,
+  api_key_nonce text,
+  api_key_salt text,
+  theme text DEFAULT "light",
+  profile_name text,
+  updated_at datetime
+);
+CREATE UNIQUE INDEX idx_headplane_settings_user_id ON headplane_settings(user_id);

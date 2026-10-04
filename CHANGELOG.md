@@ -2,6 +2,13 @@
 
 ## Next
 
+### Headplane schema repair
+
+- Fix SQLite schema validation rejecting the Headplane user and settings tables.
+  The repair migration recreates missing Headplane tables after the earlier
+  table-removal workaround, and the admin users page now displays backend load
+  errors instead of crashing.
+
 ### Phase 13c Known Gap Fix
 
 Resolved the Known Gap in Phase 13c multi-user implementation, enabling full admin user management UI for API key-authenticated sessions:
