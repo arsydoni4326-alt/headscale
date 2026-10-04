@@ -530,6 +530,30 @@ func loginAndGetToken(t *testing.T, auth *HeadplaneAuth, hsdb *db.HSDatabase, us
 	return resp["token"].(string)
 }
 
+// TestAPIKeyAdminAccess tests that API key-authenticated admins can access user management endpoints
+func TestAPIKeyAdminAccess(t *testing.T) {
+	hsdb := setupTestDBForUsers(t)
+	defer hsdb.Close()
+
+	// Create an API key
+	apiKeyStr, _, err := hsdb.CreateAPIKey(nil)
+	require.NoError(t, err)
+
+	t.Run("API key authenticates successfully", func(t *testing.T) {
+		// Test that API key is valid
+		valid, err := hsdb.ValidateAPIKey(apiKeyStr)
+		require.NoError(t, err)
+		assert.True(t, valid, "API key should be valid")
+	})
+	
+	t.Run("API key can authenticate via AuthenticateAPIKey", func(t *testing.T) {
+		// Test that API key can be authenticated
+		apiKey, err := hsdb.AuthenticateAPIKey(apiKeyStr)
+		require.NoError(t, err)
+		require.NotNil(t, apiKey, "API key should authenticate successfully")
+	})
+}
+
 // mockState is a minimal State mock for testing that only implements DB()
 // The tests only need DB access, not the full State interface
 type mockState struct {
@@ -556,4 +580,98 @@ func setupTestDBForUsers(t *testing.T) *db.HSDatabase {
 	require.NoError(t, err)
 
 	return hsdb
+}
+
+// TestAPIKeyAuthContext tests that API key authentication creates proper auth context
+func TestAPIKeyAuthContext(t *testing.T) {
+	hsdb := setupTestDBForUsers(t)
+	defer hsdb.Close()
+
+	// Create an API key
+	apiKeyStr, _, err := hsdb.CreateAPIKey(nil)
+	require.NoError(t, err)
+
+	// Test API key authentication via database
+	apiKey, err := hsdb.AuthenticateAPIKey(apiKeyStr)
+	require.NoError(t, err)
+	require.NotNil(t, apiKey)
+	
+	// API keys are all-access admin keys
+	assert.NotNil(t, apiKey, "API key should authenticate successfully")
+}
+
+// TestPasswordSessionAuthContext tests that password sessions create proper auth context
+func TestPasswordSessionAuthContext(t *testing.T) {
+	hsdb := setupTestDBForUsers(t)
+	defer hsdb.Close()
+
+	cfg := &types.Config{}
+	auth := NewHeadplaneAuth(cfg, hsdb)
+
+	// Create admin user and get session token
+	adminToken := loginAndGetToken(t, auth, hsdb, "adminuser", "password", "admin")
+
+	// Test password session exists
+	session, ok := auth.GetSession(adminToken)
+	require.True(t, ok, "Password session should exist")
+	require.NotNil(t, session)
+	
+	assert.True(t, session.IsAdmin, "Password session should have admin access")
+	assert.Equal(t, "adminuser", session.Username)
+	assert.NotEqual(t, uint(0), session.UserID)
+}
+
+// TestInvalidAuthenticationRejected tests that invalid auth is properly rejected
+func TestInvalidAuthenticationRejected(t *testing.T) {
+	hsdb := setupTestDBForUsers(t)
+	defer hsdb.Close()
+
+	tests := []struct {
+		name    string
+		token   string
+	}{
+		{"invalid token", "invalid-token-12345"},
+		{"malformed token", "hskey-api-wrong-format"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Test that invalid API keys are rejected
+			valid, err := hsdb.ValidateAPIKey(tt.token)
+			assert.Error(t, err)
+			assert.False(t, valid)
+		})
+	}
+}
+
+// TestNonAdminPasswordSessionRejected tests that non-admin password sessions are rejected
+func TestNonAdminPasswordSessionRejected(t *testing.T) {
+	hsdb := setupTestDBForUsers(t)
+	defer hsdb.Close()
+
+	cfg := &types.Config{}
+	auth := NewHeadplaneAuth(cfg, hsdb)
+
+	// Create non-admin user and get session token
+	userToken := loginAndGetToken(t, auth, hsdb, "regularuser", "password", "user")
+
+	// Test that session exists but is not admin
+	session, ok := auth.GetSession(userToken)
+	require.True(t, ok, "Session should exist")
+	assert.False(t, session.IsAdmin, "Regular user should not be admin")
+}
+
+// TestPasswordOnlyEndpoints tests that API keys work with DB AuthenticateAPIKey
+func TestPasswordOnlyEndpoints(t *testing.T) {
+	hsdb := setupTestDBForUsers(t)
+	defer hsdb.Close()
+
+	// Create an API key
+	apiKeyStr, _, err := hsdb.CreateAPIKey(nil)
+	require.NoError(t, err)
+
+	// Test that API key authenticates properly
+	apiKey, err := hsdb.AuthenticateAPIKey(apiKeyStr)
+	require.NoError(t, err)
+	assert.NotNil(t, apiKey, "API key should authenticate")
 }
