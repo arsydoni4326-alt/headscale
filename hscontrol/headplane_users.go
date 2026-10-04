@@ -220,14 +220,19 @@ func (h *Headscale) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Convert to response format
-	response := make([]HeadplaneUserResponse, len(users))
+	userList := make([]HeadplaneUserResponse, len(users))
 	for i, user := range users {
-		response[i] = HeadplaneUserResponse{
+		userList[i] = HeadplaneUserResponse{
 			ID:        user.ID,
 			Username:  user.Username,
 			Role:      user.Role,
 			CreatedAt: user.CreatedAt.Unix(),
 		}
+	}
+
+	// Wrap in object with "users" key to match frontend expectations
+	response := map[string]interface{}{
+		"users": userList,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
