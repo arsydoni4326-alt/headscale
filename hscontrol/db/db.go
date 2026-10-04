@@ -776,20 +776,6 @@ WHERE tags IS NOT NULL AND tags != '[]' AND tags != '' AND tags != 'null'
 					return tx.Migrator().DropTable(&HeadplaneUser{})
 				},
 			},
-		},
-		{
-			// Add headplane_users table for multi-user Headplane authentication.
-			// This enables multiple users to log in to the Headplane UI with
-			// individual credentials (username + password) and role-based access.
-			// Migration auto-creates an admin user from the existing config password.
-			ID: "202610031721-create-headplane-users",
-			Migrate: func(tx *gorm.DB) error {
-				return ensureHeadplaneUsersTable(tx, cfg)
-			},
-			Rollback: func(tx *gorm.DB) error {
-				return tx.Migrator().DropTable(&HeadplaneUser{})
-			},
-		},
 		{
 			// Migrate headplane_settings from single-user to per-user.
 			// Adds user_id column, removes single-row constraint, and migrates
