@@ -306,6 +306,325 @@ journalctl -u headscale -n 50
    EnvironmentFile=/etc/headscale/environment
    ```
 
+## Database Migration Issues
+
+### Missing headplane_users table
+
+**Symptoms:**
+
+- Error in logs: `SQL logic error: no such table: headplane_users (1)`
+- HTTP 500 errors when accessing `/api/v1/headplane/users`
+- Frontend error when visiting `/admin/admin/users`: `Cannot read properties of undefined (reading 'length')`
+- Headscale starts but user management features don't work
+
+**Cause:**
+
+The `headplane_users` table was not created during database initialization or migration. This table is required for the multi-user Headplane authentication system introduced in recent versions.
+
+**How migrations work:**
+
+Headscale uses an automatic migration system that runs on server startup. Migrations are defined in code (`hscontrol/db/db.go`) and tracked in the `migrations` table. The `headplane_users` table should be created automatically by migration ID `202610031721-create-headplane-users`.
+
+**Solution 1: Restart Headscale (let auto-migration retry)**
+
+The simplest fix is to restart Headscale and let the migration system retry:
+
+```bash
+# For systemd
+systemctl restart headscale
+
+# For Docker
+docker restart headscale
+
+# Or kill and restart the process
+pkill headscale
+headscale serve
+```
+
+Check the logs during startup for migration-related messages:
+
+```bash
+# For systemd
+journalctl -u headscale -f
+
+# For Docker
+docker logs -f headscale
+```
+
+Look for messages like:
+- `Created default admin user from config password`
+- `running migration 202610031721-create-headplane-users`
+
+**Solution 2: Manually create the table (SQLite)**
+
+If auto-migration fails, you can manually create the table using SQL. This is a safe operation that will not affect existing data.
+
+1. **Stop Headscale:**
+
+   ```bash
+   systemctl stop headscale
+   # or
+   docker stop headscale
+   ```
+
+2. **Locate your database file:**
+
+   Check your `config.yaml` for the database path:
+   
+   ```bash
+   grep -A 5 "^database:" /etc/headscale/config.yaml
+   ```
+   
+   Common locations:
+   - `/var/lib/headscale/db.sqlite`
+   - `/etc/headscale/db.sqlite`
+   - `./db.sqlite` (if running from source)
+
+3. **Backup your database:**
+
+   ```bash
+   cp /var/lib/headscale/db.sqlite /var/lib/headscale/db.sqlite.backup-$(date +%Y%m%d-%H%M%S)
+   ```
+
+4. **Open the database and check if migration is recorded:**
+
+   ```bash
+   sqlite3 /var/lib/headscale/db.sqlite
+   ```
+   
+   Inside sqlite3:
+   
+   ```sql
+   -- Check if migration was attempted
+   SELECT * FROM migrations WHERE id = '202610031721-create-headplane-users';
+   ```
+   
+   - If it returns a row, the migration was recorded but the table creation failed
+   - If it returns nothing, the migration was never run
+
+5. **Check if the table already exists:**
+
+   ```sql
+   SELECT name FROM sqlite_master WHERE type='table' AND name='headplane_users';
+   ```
+   
+   - If it returns `headplane_users`, the table exists (migration issue is elsewhere)
+   - If it returns nothing, proceed to create the table
+
+6. **Manually create the headplane_users table:**
+
+   ```sql
+   -- Create the headplane_users table
+   CREATE TABLE IF NOT EXISTS headplane_users (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       username TEXT NOT NULL UNIQUE,
+       password_hash TEXT NOT NULL,
+       role TEXT NOT NULL DEFAULT 'user',
+       created_at DATETIME,
+       updated_at DATETIME
+   );
+   
+   -- Create index for username lookups
+   CREATE UNIQUE INDEX IF NOT EXISTS idx_headplane_users_username 
+       ON headplane_users(username);
+   ```
+
+7. **Create a default admin user (if needed):**
+
+   If you have a password configured in `config.yaml` under `headplane.password`, you need to create an admin user manually. The password must be bcrypt-hashed.
+   
+   Generate bcrypt hash for your password (choose one method):
+   
+   ```bash
+   # Exit sqlite3 first (type .quit)
+   
+   # Method 1: Using htpasswd (if available)
+   htpasswd -nBC 12 "" | tr -d ':\n'
+   
+   # Method 2: Using Python
+   python3 -c "import bcrypt; print(bcrypt.hashpw(b'your-password', bcrypt.gensalt(12)).decode())"
+   
+   # Method 3: Using Go (if available)
+   go run -<<'EOF'
+   package main
+   import (
+       "fmt"
+       "golang.org/x/crypto/bcrypt"
+   )
+   func main() {
+       hash, _ := bcrypt.GenerateFromPassword([]byte("your-password"), 12)
+       fmt.Println(string(hash))
+   }
+   EOF
+   ```
+   
+   Then insert the admin user:
+   
+   ```bash
+   sqlite3 /var/lib/headscale/db.sqlite
+   ```
+   
+   ```sql
+   -- Replace $2a$12$... with your bcrypt hash from above
+   INSERT INTO headplane_users (username, password_hash, role, created_at, updated_at)
+   VALUES ('admin', '$2a$12$YOUR_BCRYPT_HASH_HERE', 'admin', datetime('now'), datetime('now'));
+   ```
+
+8. **Record the migration (if it wasn't recorded):**
+
+   ```sql
+   -- Only run this if the migration wasn't in the migrations table
+   INSERT OR IGNORE INTO migrations (id) VALUES ('202610031721-create-headplane-users');
+   ```
+
+9. **Verify the table and data:**
+
+   ```sql
+   -- Check table structure
+   .schema headplane_users
+   
+   -- Check if admin user exists
+   SELECT id, username, role FROM headplane_users;
+   
+   -- Exit sqlite3
+   .quit
+   ```
+
+10. **Start Headscale:**
+
+    ```bash
+    systemctl start headscale
+    # or
+    docker start headscale
+    ```
+
+11. **Verify the fix:**
+
+    ```bash
+    # Check logs for errors
+    journalctl -u headscale -n 50
+    
+    # Test the API endpoint (replace YOUR_API_KEY)
+    curl -H "Authorization: YOUR_API_KEY" http://localhost:8080/api/v1/headplane/users
+    
+    # Or visit the Headplane UI and try to log in
+    # Navigate to http://your-headscale:8080/admin/admin/users
+    ```
+
+**Solution 3: Manually create the table (PostgreSQL)**
+
+If you're using PostgreSQL instead of SQLite:
+
+1. **Connect to your database:**
+
+   ```bash
+   psql -h localhost -U headscale -d headscale
+   ```
+
+2. **Check if table exists:**
+
+   ```sql
+   \dt headplane_users
+   ```
+
+3. **Create the table:**
+
+   ```sql
+   CREATE TABLE IF NOT EXISTS headplane_users (
+       id SERIAL PRIMARY KEY,
+       username TEXT NOT NULL UNIQUE,
+       password_hash TEXT NOT NULL,
+       role TEXT NOT NULL DEFAULT 'user',
+       created_at TIMESTAMP,
+       updated_at TIMESTAMP
+   );
+   
+   CREATE UNIQUE INDEX IF NOT EXISTS idx_headplane_users_username 
+       ON headplane_users(username);
+   ```
+
+4. **Create admin user:**
+
+   Generate bcrypt hash (same as SQLite instructions above), then:
+   
+   ```sql
+   INSERT INTO headplane_users (username, password_hash, role, created_at, updated_at)
+   VALUES ('admin', '$2a$12$YOUR_BCRYPT_HASH_HERE', 'admin', NOW(), NOW());
+   ```
+
+5. **Record migration:**
+
+   ```sql
+   INSERT INTO migrations (id) VALUES ('202610031721-create-headplane-users')
+   ON CONFLICT DO NOTHING;
+   ```
+
+**Verification checklist:**
+
+After applying the fix:
+
+- [ ] `headplane_users` table exists in database
+- [ ] At least one admin user exists in the table
+- [ ] Migration `202610031721-create-headplane-users` is recorded in `migrations` table
+- [ ] Headscale starts without errors
+- [ ] No `no such table: headplane_users` errors in logs
+- [ ] `/api/v1/headplane/users` endpoint returns HTTP 200
+- [ ] Headplane UI `/admin/admin/users` page loads without errors
+
+**Prevention:**
+
+To avoid this issue in the future:
+
+1. **Always backup your database before upgrading:**
+   ```bash
+   cp /var/lib/headscale/db.sqlite /var/lib/headscale/db.sqlite.backup-$(date +%Y%m%d)
+   ```
+
+2. **Check logs during startup:**
+   ```bash
+   journalctl -u headscale -f
+   ```
+
+3. **Verify migrations after upgrade:**
+   ```bash
+   sqlite3 /var/lib/headscale/db.sqlite "SELECT * FROM migrations ORDER BY id;"
+   ```
+
+4. **Keep your database file writable:**
+   ```bash
+   ls -la /var/lib/headscale/db.sqlite
+   # Should be owned by headscale user with read/write permissions
+   ```
+
+### Migration failed during upgrade
+
+**Symptoms:**
+
+- Headscale won't start after upgrade
+- Error: `migration failed: ...`
+- Database is in an inconsistent state
+
+**Solution:**
+
+1. **Restore from backup:**
+   
+   ```bash
+   systemctl stop headscale
+   cp /var/lib/headscale/db.sqlite.backup /var/lib/headscale/db.sqlite
+   systemctl start headscale
+   ```
+
+2. **If no backup exists, try to repair:**
+   
+   Check the specific migration error in logs and consult the [Missing headplane_users table](#missing-headplane_users-table) section above.
+
+3. **Report the issue:**
+   
+   If manual table creation doesn't work, file a bug report with:
+   - The exact error message from logs
+   - Output of `.schema` from sqlite3
+   - Output of `SELECT * FROM migrations;`
+
 ## Network and Connectivity Issues
 
 ### Cannot connect to Headplane web interface
