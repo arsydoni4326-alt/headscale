@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/juanfont/headscale/hscontrol/db"
+	"github.com/arsydoni4326-alt/headscale/hscontrol/db"
 	"github.com/rs/zerolog/log"
 )
 

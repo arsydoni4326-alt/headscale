@@ -12,7 +12,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/juanfont/headscale/hscontrol/db"
+	"github.com/arsydoni4326-alt/headscale/hscontrol/db"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/pbkdf2"
 	"gorm.io/gorm"

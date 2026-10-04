@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/juanfont/headscale/hscontrol/updatecheck"
+	"github.com/arsydoni4326-alt/headscale/hscontrol/updatecheck"
 )
 
 // updateCheckInput mirrors the query parameters of the update-check endpoint.

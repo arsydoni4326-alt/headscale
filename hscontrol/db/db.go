@@ -14,9 +14,9 @@ import (
 
 	"github.com/glebarez/sqlite"
 	"github.com/go-gormigrate/gormigrate/v2"
-	"github.com/juanfont/headscale/hscontrol/db/sqliteconfig"
-	"github.com/juanfont/headscale/hscontrol/types"
-	"github.com/juanfont/headscale/hscontrol/util"
+	"github.com/arsydoni4326-alt/headscale/hscontrol/db/sqliteconfig"
+	"github.com/arsydoni4326-alt/headscale/hscontrol/types"
+	"github.com/arsydoni4326-alt/headscale/hscontrol/util"
 	"github.com/rs/zerolog/log"
 	"github.com/tailscale/squibble"
 	"gorm.io/driver/postgres"
@@ -538,7 +538,7 @@ AND auth_key_id NOT IN (
 				// node's pre-auth key, so nodes registered via CLI/OIDC (no
 				// pre-auth key) cannot be recovered and must be reassigned
 				// manually.
-				// Fixes: https://github.com/juanfont/headscale/issues/3323
+				// Fixes: https://github.com/arsydoni4326-alt/headscale/issues/3323
 				ID: "202606181200-recover-null-tags-node-user-id",
 				Migrate: func(tx *gorm.DB) error {
 					err := tx.Exec(`
@@ -691,7 +691,7 @@ WHERE user_id IS NULL
 				// Match the tagged-node predicate of 0.29's
 				// clear-tagged-node-user-id migration (a nil tags slice
 				// marshals to 'null', so exclude it).
-				// Fixes: https://github.com/juanfont/headscale/issues/3371
+				// Fixes: https://github.com/arsydoni4326-alt/headscale/issues/3371
 				ID: "202607241200-clear-tagged-node-expiry",
 				Migrate: func(tx *gorm.DB) error {
 					err := tx.Exec(`

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/juanfont/headscale/hscontrol/types"
+	"github.com/arsydoni4326-alt/headscale/hscontrol/types"
 	"gorm.io/gorm"
 )
 

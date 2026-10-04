@@ -1,4 +1,4 @@
-module github.com/juanfont/headscale
+module github.com/arsydoni4326-alt/headscale
 
 go 1.27.0
 
