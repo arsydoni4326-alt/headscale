@@ -70,6 +70,16 @@ var headplaneSettingsIndexes = []string{
 	`CREATE UNIQUE INDEX idx_headplane_settings_user_id ON headplane_settings(user_id)`,
 }
 
+type headplaneIndex struct {
+	name string
+	ddl  string
+}
+
+var headplaneIndexes = []headplaneIndex{
+	{name: headplaneUsersUsernameIndex, ddl: headplaneUserIndexes[0]},
+	{name: headplaneSettingsUserIDIndex, ddl: headplaneSettingsIndexes[0]},
+}
+
 // EnsureHeadplaneTables creates the Headplane tables and indexes when missing.
 // Both new installations and upgrades use this so SQLite validation sees one
 // canonical schema.
@@ -113,6 +123,37 @@ func repairHeadplaneSchema(tx *gorm.DB, cfg *types.Config) error {
 		for _, table := range []string{headplaneUsersTableName, headplaneSettingsTableName} {
 			if err := rebuildLegacyHeadplaneTable(tx, table); err != nil {
 				return err
+			}
+		}
+
+		return nil
+	})
+}
+
+func normalizeHeadplaneIndexes(tx *gorm.DB) error {
+	if tx.Name() != sqliteDialect {
+		return nil
+	}
+
+	return tx.Transaction(func(tx *gorm.DB) error {
+		for _, index := range headplaneIndexes {
+			var current string
+			if err := tx.Raw(
+				`SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?`,
+				index.name,
+			).Scan(&current).Error; err != nil {
+				return fmt.Errorf("reading %s definition: %w", index.name, err)
+			}
+
+			if current == index.ddl {
+				continue
+			}
+
+			if err := tx.Exec(`DROP INDEX IF EXISTS ` + index.name).Error; err != nil {
+				return fmt.Errorf("dropping %s: %w", index.name, err)
+			}
+			if err := tx.Exec(index.ddl).Error; err != nil {
+				return fmt.Errorf("creating %s: %w", index.name, err)
 			}
 		}
 
