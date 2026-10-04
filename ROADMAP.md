@@ -578,6 +578,21 @@ individual credentials, API keys, and preferences.
 - Migration support from Phase 13a single-user to Phase 13c multi-user
 - Comprehensive integration testing and security testing
 
+**Known Gap:**
+
+The user management UI is currently only accessible when logged in with local Headplane credentials. When accessing Headplane via API key authentication (without Headplane login), the `/admin/users` page shows only "Add user" (for creating Headscale user namespaces/machines), not "Add Headplane User" (for creating dashboard users).
+
+**Follow-up Required:**
+
+- [ ] Enable admin user management UI for API key authenticated sessions
+- [ ] Add "Add Headplane User" button/functionality to `/admin/users` when accessed via API key
+- [ ] Allow admins to create, edit, and delete Headplane dashboard users from the UI regardless of authentication method
+- [ ] Ensure proper authorization checks (admin-only access)
+
+This limitation means that while the backend user management APIs exist, the frontend UI for managing Headplane dashboard users is not accessible to admins using API key authentication. The feature is only fully functional when logged in with Headplane local credentials.
+
+**Reference:** Observed on 2026-10-04: The `/admin/users` page when accessed via API key authentication shows only user machine management, not Headplane user management.
+
 ---
 
 ## Phase 13 Architecture Note
