@@ -578,20 +578,35 @@ individual credentials, API keys, and preferences.
 - Migration support from Phase 13a single-user to Phase 13c multi-user
 - Comprehensive integration testing and security testing
 
-**Known Gap:**
+**Known Gap:** ~~Resolved in Phase 13c Known Gap Fix (2026-10-04)~~
 
-The user management UI is currently only accessible when logged in with local Headplane credentials. When accessing Headplane via API key authentication (without Headplane login), the `/admin/users` page shows only "Add user" (for creating Headscale user namespaces/machines), not "Add Headplane User" (for creating dashboard users).
+~~The user management UI is currently only accessible when logged in with local Headplane credentials. When accessing Headplane via API key authentication (without Headplane login), the `/admin/users` page shows only "Add user" (for creating Headscale user namespaces/machines), not "Add Headplane User" (for creating dashboard users).~~
+
+**Resolution:**
+
+As of 2026-10-04, the Known Gap has been resolved. Admin user management UI is now fully accessible via API key authentication:
+
+- [x] Enable admin user management UI for API key authenticated sessions
+- [x] Add "Add Headplane User" button/functionality to `/admin/users` when accessed via API key
+- [x] Allow admins to create, edit, and delete Headplane dashboard users from the UI regardless of authentication method
+- [x] Ensure proper authorization checks (admin-only access)
+- [x] Update documentation to reflect unified admin UI capabilities
+
+**What Changed:**
+
+- Admin API keys can now access all user management endpoints and UI features
+- The `/admin/users` page displays full user management interface for both password and API key sessions
+- Authorization checks properly validate admin privileges for both authentication methods
+- Comprehensive documentation added: API reference, user guides, and examples
+
+**Reference:** 
+- API Reference: [`docs/ref/api/headplane-users.md`](./docs/ref/api/headplane-users.md)
+- Authentication Guide: [`docs/usage/authentication.md#admin-user-management-with-api-keys`](./docs/usage/authentication.md#admin-user-management-with-api-keys)
+- CHANGELOG: Phase 13c Known Gap Fix section
 
 **Follow-up Required:**
 
-- [ ] Enable admin user management UI for API key authenticated sessions
-- [ ] Add "Add Headplane User" button/functionality to `/admin/users` when accessed via API key
-- [ ] Allow admins to create, edit, and delete Headplane dashboard users from the UI regardless of authentication method
-- [ ] Ensure proper authorization checks (admin-only access)
-
-This limitation means that while the backend user management APIs exist, the frontend UI for managing Headplane dashboard users is not accessible to admins using API key authentication. The feature is only fully functional when logged in with Headplane local credentials.
-
-**Reference:** Observed on 2026-10-04: The `/admin/users` page when accessed via API key authentication shows only user machine management, not Headplane user management.
+None. The Known Gap is fully resolved.
 
 ---
 
