@@ -563,6 +563,7 @@ See `docs/phase13b-integration-testing.md` for detailed integration test scenari
 
 - [Settings User Guide](../../usage/settings.md) — End-user documentation for the Settings page
 - [Authentication API](../authentication.md) — Password login endpoint documentation
+- [Headplane Users API](./headplane-users.md) — User management endpoints (admin only)
 - [Configuration Reference](../configuration.md) — Headplane configuration options
 - [Phase 13b Implementation Plan](../../../docs/phase13b-implementation-plan.md) — Technical implementation details
 

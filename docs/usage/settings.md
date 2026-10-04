@@ -324,14 +324,21 @@ The Settings system is designed with security in mind:
 
 ## Known Issues
 
+### Phase 13c Updates
+
+1. **Admin user management now available via API key** (Known Gap resolved):
+   - Admin API keys can now access the full user management UI
+   - The `/admin/users` page shows "Add Headplane User" and full CRUD operations when authenticated via admin API key
+   - See [Authentication Guide](authentication.md#admin-user-management-with-api-keys) for details
+
+2. **Multi-user support** (Phase 13c):
+   - Headplane now supports multiple dashboard users with role-based access control
+   - Each user has their own settings (API key, theme, profile)
+   - Admin users can manage other users via the Settings interface or API
+
 ### Phase 13b Known Limitations
 
-1. **Single-user only**:
-   - Phase 13b supports only one Headplane user
-   - All settings are shared if multiple people access the same Headplane instance
-   - Multi-user support is planned for Phase 13c
-
-2. **Password stored in config file**:
+1. **Password stored in config file**:
    - Changing password requires file write access or environment variable update
    - On some deployments, this may require admin intervention
    - Consider using environment variable for easier password rotation
