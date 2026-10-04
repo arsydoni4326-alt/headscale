@@ -187,7 +187,7 @@ func UpdateSettings(db *gorm.DB, userID uint, apiKeyEncrypted, apiKeyNonce, apiK
 	// First, check if settings exist
 	var existing HeadplaneSettings
 	err := db.Where("user_id = ?", userID).First(&existing).Error
-	
+
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		// Create new settings
 		settings := HeadplaneSettings{
@@ -200,11 +200,11 @@ func UpdateSettings(db *gorm.DB, userID uint, apiKeyEncrypted, apiKeyNonce, apiK
 		}
 		return db.Create(&settings).Error
 	}
-	
+
 	if err != nil {
 		return err
 	}
-	
+
 	// Update existing settings
 	return db.Model(&existing).Updates(map[string]interface{}{
 		"api_key_encrypted": apiKeyEncrypted,
@@ -215,9 +215,9 @@ func UpdateSettings(db *gorm.DB, userID uint, apiKeyEncrypted, apiKeyNonce, apiK
 	}).Error
 }
 
-// InitHeadplaneSettings creates the headplane_settings table if it doesn't exist.
-func InitHeadplaneSettings(db *gorm.DB) error {
-	return db.AutoMigrate(&HeadplaneSettings{})
+// InitHeadplaneSettings creates Headplane tables using the canonical schema.
+func InitHeadplaneSettings(database *gorm.DB) error {
+	return db.EnsureHeadplaneTables(database)
 }
 
 // HandleGetSettings handles GET /api/v1/headplane/settings.

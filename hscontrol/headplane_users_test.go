@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/arsydoni4326-alt/headscale/hscontrol/db"
 	"github.com/arsydoni4326-alt/headscale/hscontrol/state"
 	"github.com/arsydoni4326-alt/headscale/hscontrol/types"
+	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -158,11 +158,11 @@ func TestHandleGetUser(t *testing.T) {
 
 	cfg := &types.Config{}
 	auth := NewHeadplaneAuth(cfg, hsdb)
-	
+
 	// Create a minimal state for testing
 	st, err := state.NewState(cfg)
 	require.NoError(t, err)
-	
+
 	app := &Headscale{
 		cfg:           cfg,
 		headplaneAuth: auth,
@@ -367,7 +367,7 @@ func TestErrorHandling_Unauthorized(t *testing.T) {
 	app.HandleListUsers(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
-	
+
 	var errorResp map[string]string
 	errUnmarshal := json.Unmarshal(w.Body.Bytes(), &errorResp)
 	require.NoError(t, errUnmarshal)
@@ -400,7 +400,7 @@ func TestErrorHandling_Forbidden(t *testing.T) {
 	app.HandleListUsers(w, req)
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
-	
+
 	var errorResp map[string]string
 	errUnmarshal := json.Unmarshal(w.Body.Bytes(), &errorResp)
 	require.NoError(t, errUnmarshal)
@@ -430,7 +430,7 @@ func TestErrorHandling_InvalidToken(t *testing.T) {
 	app.HandleListUsers(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
-	
+
 	var errorResp map[string]string
 	errUnmarshal := json.Unmarshal(w.Body.Bytes(), &errorResp)
 	require.NoError(t, errUnmarshal)
@@ -455,9 +455,9 @@ func TestErrorHandling_AllEndpoints(t *testing.T) {
 	userToken := loginAndGetToken(t, auth, hsdb, "regularuser", "password", "user")
 
 	endpoints := []struct {
-		method string
-		path   string
-		body   interface{}
+		method   string
+		path     string
+		body     interface{}
 		urlParam string
 	}{
 		{"GET", "/api/v1/headplane/users", nil, ""},
@@ -503,7 +503,7 @@ func TestErrorHandling_AllEndpoints(t *testing.T) {
 
 			// All should return 403 Forbidden for non-admin user
 			assert.Equal(t, http.StatusForbidden, w.Code)
-			
+
 			var errorResp map[string]string
 			errUnmarshal := json.Unmarshal(w.Body.Bytes(), &errorResp)
 			require.NoError(t, errUnmarshal)
@@ -546,7 +546,7 @@ func TestAPIKeyAdminAccess(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, valid, "API key should be valid")
 	})
-	
+
 	t.Run("API key can authenticate via AuthenticateAPIKey", func(t *testing.T) {
 		// Test that API key can be authenticated
 		apiKey, err := hsdb.AuthenticateAPIKey(apiKeyStr)
@@ -565,14 +565,14 @@ func (m *mockState) DB() *db.HSDatabase {
 	return m.db
 }
 
-// setupTestDBForUsers creates an in-memory SQLite database for testing.
+// setupTestDBForUsers creates a SQLite database for testing.
 func setupTestDBForUsers(t *testing.T) *db.HSDatabase {
 	t.Helper()
 	cfg := &types.Config{
 		Database: types.DatabaseConfig{
 			Type: types.DatabaseSqlite,
 			Sqlite: types.SqliteConfig{
-				Path: ":memory:",
+				Path: t.TempDir() + "/headscale_test.db",
 			},
 		},
 	}
@@ -596,7 +596,7 @@ func TestAPIKeyAuthContext(t *testing.T) {
 	apiKey, err := hsdb.AuthenticateAPIKey(apiKeyStr)
 	require.NoError(t, err)
 	require.NotNil(t, apiKey)
-	
+
 	// API keys are all-access admin keys
 	assert.NotNil(t, apiKey, "API key should authenticate successfully")
 }
@@ -616,7 +616,7 @@ func TestPasswordSessionAuthContext(t *testing.T) {
 	session, ok := auth.GetSession(adminToken)
 	require.True(t, ok, "Password session should exist")
 	require.NotNil(t, session)
-	
+
 	assert.True(t, session.IsAdmin, "Password session should have admin access")
 	assert.Equal(t, "adminuser", session.Username)
 	assert.NotEqual(t, uint(0), session.UserID)
@@ -628,8 +628,8 @@ func TestInvalidAuthenticationRejected(t *testing.T) {
 	defer hsdb.Close()
 
 	tests := []struct {
-		name    string
-		token   string
+		name  string
+		token string
 	}{
 		{"invalid token", "invalid-token-12345"},
 		{"malformed token", "hskey-api-wrong-format"},
@@ -695,23 +695,23 @@ func testEndpointAuth(t *testing.T, h *Headscale, apiKey, adminToken, userToken 
 
 	// Test LIST USERS endpoint
 	testListUsersAuth(t, h, apiKey, adminToken, userToken)
-	
+
 	// Test CREATE USER endpoint
 	testCreateUserAuth(t, h, apiKey, adminToken, userToken)
-	
+
 	// Test GET USER endpoint
 	testGetUserAuth(t, h, apiKey, adminToken, userToken)
-	
+
 	// Test UPDATE USER endpoint
 	testUpdateUserAuth(t, h, apiKey, adminToken, userToken)
-	
+
 	// Test DELETE USER endpoint
 	testDeleteUserAuth(t, h, apiKey, adminToken, userToken)
 }
 
 func testListUsersAuth(t *testing.T, h *Headscale, apiKey, adminToken, userToken string) {
 	t.Helper()
-	
+
 	tests := []struct {
 		name           string
 		authToken      string
@@ -723,7 +723,7 @@ func testListUsersAuth(t *testing.T, h *Headscale, apiKey, adminToken, userToken
 		{"NoAuth_Unauthorized", "", http.StatusUnauthorized},
 		{"InvalidToken_Unauthorized", "invalid-token", http.StatusUnauthorized},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run("ListUsers_"+tt.name, func(t *testing.T) {
 			req := httptest.NewRequest("GET", "/api/v1/headplane/users", nil)
@@ -731,9 +731,9 @@ func testListUsersAuth(t *testing.T, h *Headscale, apiKey, adminToken, userToken
 				req.Header.Set("Authorization", tt.authToken)
 			}
 			w := httptest.NewRecorder()
-			
+
 			h.HandleListUsers(w, req)
-			
+
 			assert.Equal(t, tt.expectedStatus, w.Code)
 			validateErrorResponse(t, w, tt.expectedStatus)
 		})
@@ -742,7 +742,7 @@ func testListUsersAuth(t *testing.T, h *Headscale, apiKey, adminToken, userToken
 
 func testCreateUserAuth(t *testing.T, h *Headscale, apiKey, adminToken, userToken string) {
 	t.Helper()
-	
+
 	tests := []struct {
 		name           string
 		authToken      string
@@ -754,7 +754,7 @@ func testCreateUserAuth(t *testing.T, h *Headscale, apiKey, adminToken, userToke
 		{"NonAdminSession_Forbidden", userToken, "shouldfail", http.StatusForbidden},
 		{"NoAuth_Unauthorized", "", "shouldfail2", http.StatusUnauthorized},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run("CreateUser_"+tt.name, func(t *testing.T) {
 			body, _ := json.Marshal(map[string]string{
@@ -767,9 +767,9 @@ func testCreateUserAuth(t *testing.T, h *Headscale, apiKey, adminToken, userToke
 				req.Header.Set("Authorization", tt.authToken)
 			}
 			w := httptest.NewRecorder()
-			
+
 			h.HandleRegisterUser(w, req)
-			
+
 			assert.Equal(t, tt.expectedStatus, w.Code)
 			validateErrorResponse(t, w, tt.expectedStatus)
 		})
@@ -778,7 +778,7 @@ func testCreateUserAuth(t *testing.T, h *Headscale, apiKey, adminToken, userToke
 
 func testGetUserAuth(t *testing.T, h *Headscale, apiKey, adminToken, userToken string) {
 	t.Helper()
-	
+
 	tests := []struct {
 		name           string
 		authToken      string
@@ -789,31 +789,30 @@ func testGetUserAuth(t *testing.T, h *Headscale, apiKey, adminToken, userToken s
 		{"NonAdminSession_Forbidden", userToken, http.StatusForbidden},
 		{"NoAuth_Unauthorized", "", http.StatusUnauthorized},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run("GetUser_"+tt.name, func(t *testing.T) {
 			req := httptest.NewRequest("GET", "/api/v1/headplane/users/1", nil)
 			if tt.authToken != "" {
 				req.Header.Set("Authorization", tt.authToken)
 			}
-			
+
 			rctx := chi.NewRouteContext()
 			rctx.URLParams.Add("id", "1")
 			req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-			
+
 			w := httptest.NewRecorder()
 			h.HandleGetUser(w, req)
-			
+
 			assert.Equal(t, tt.expectedStatus, w.Code)
 			validateErrorResponse(t, w, tt.expectedStatus)
 		})
 	}
 }
 
-
 func testUpdateUserAuth(t *testing.T, h *Headscale, apiKey, adminToken, userToken string) {
 	t.Helper()
-	
+
 	tests := []struct {
 		name           string
 		authToken      string
@@ -823,7 +822,7 @@ func testUpdateUserAuth(t *testing.T, h *Headscale, apiKey, adminToken, userToke
 		{"NonAdminSession_Forbidden", userToken, http.StatusForbidden},
 		{"NoAuth_Unauthorized", "", http.StatusUnauthorized},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run("UpdateUser_"+tt.name, func(t *testing.T) {
 			body, _ := json.Marshal(map[string]string{"username": "updated"})
@@ -831,14 +830,14 @@ func testUpdateUserAuth(t *testing.T, h *Headscale, apiKey, adminToken, userToke
 			if tt.authToken != "" {
 				req.Header.Set("Authorization", tt.authToken)
 			}
-			
+
 			rctx := chi.NewRouteContext()
 			rctx.URLParams.Add("id", "3")
 			req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-			
+
 			w := httptest.NewRecorder()
 			h.HandleUpdateUser(w, req)
-			
+
 			assert.Equal(t, tt.expectedStatus, w.Code)
 			validateErrorResponse(t, w, tt.expectedStatus)
 		})
@@ -847,7 +846,7 @@ func testUpdateUserAuth(t *testing.T, h *Headscale, apiKey, adminToken, userToke
 
 func testDeleteUserAuth(t *testing.T, h *Headscale, apiKey, adminToken, userToken string) {
 	t.Helper()
-	
+
 	tests := []struct {
 		name           string
 		authToken      string
@@ -858,21 +857,21 @@ func testDeleteUserAuth(t *testing.T, h *Headscale, apiKey, adminToken, userToke
 		{"NonAdminSession_Forbidden", userToken, "5", http.StatusForbidden},
 		{"NoAuth_Unauthorized", "", "5", http.StatusUnauthorized},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run("DeleteUser_"+tt.name, func(t *testing.T) {
 			req := httptest.NewRequest("DELETE", "/api/v1/headplane/users/"+tt.userID, nil)
 			if tt.authToken != "" {
 				req.Header.Set("Authorization", tt.authToken)
 			}
-			
+
 			rctx := chi.NewRouteContext()
 			rctx.URLParams.Add("id", tt.userID)
 			req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-			
+
 			w := httptest.NewRecorder()
 			h.HandleDeleteUser(w, req)
-			
+
 			assert.Equal(t, tt.expectedStatus, w.Code)
 			validateErrorResponse(t, w, tt.expectedStatus)
 		})
@@ -881,7 +880,7 @@ func testDeleteUserAuth(t *testing.T, h *Headscale, apiKey, adminToken, userToke
 
 func validateErrorResponse(t *testing.T, w *httptest.ResponseRecorder, expectedStatus int) {
 	t.Helper()
-	
+
 	body := w.Body.String()
 	switch expectedStatus {
 	case http.StatusUnauthorized:
@@ -901,4 +900,3 @@ func validateErrorResponse(t *testing.T, w *httptest.ResponseRecorder, expectedS
 func TestErrorResponseFormats(t *testing.T) {
 	t.Skip("Skipping - error response format validation covered by existing authorization tests")
 }
-

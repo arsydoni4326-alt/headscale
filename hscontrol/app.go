@@ -26,11 +26,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cenkalti/backoff/v5"
-	"github.com/davecgh/go-spew/spew"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/metrics"
 	apiv1 "github.com/arsydoni4326-alt/headscale/hscontrol/api/v1"
 	apiv2 "github.com/arsydoni4326-alt/headscale/hscontrol/api/v2"
 	"github.com/arsydoni4326-alt/headscale/hscontrol/capver"
@@ -43,6 +38,11 @@ import (
 	"github.com/arsydoni4326-alt/headscale/hscontrol/types"
 	"github.com/arsydoni4326-alt/headscale/hscontrol/types/change"
 	"github.com/arsydoni4326-alt/headscale/hscontrol/util"
+	"github.com/cenkalti/backoff/v5"
+	"github.com/davecgh/go-spew/spew"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/metrics"
 	"github.com/pkg/profile"
 	"github.com/rs/zerolog/log"
 	"github.com/sasha-s/go-deadlock"
@@ -133,11 +133,6 @@ func NewHeadscale(cfg *types.Config) (*Headscale, error) {
 	s, err := state.NewState(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("init state: %w", err)
-	}
-
-	// Initialize Headplane settings table
-	if err := InitHeadplaneSettings(s.DB().DB); err != nil {
-		return nil, fmt.Errorf("init headplane settings: %w", err)
 	}
 
 	app := Headscale{

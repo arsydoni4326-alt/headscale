@@ -48,65 +48,58 @@ Authorization: Bearer hp_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789AbCdEfGhIjKlMnOpQrS
 
 **Success (200 OK)**:
 
-Returns an array of all Headplane users.
+Returns an object containing all Headplane users in its `users` array.
 
 **Schema**:
 
 ```yaml
-type: array
-items:
-  type: object
-  properties:
-    id:
-      type: integer
-      description: Unique user identifier
-      example: 1
-    username:
-      type: string
-      description: User's login username
-      example: "admin"
-    role:
-      type: string
-      enum: [admin, user]
-      description: User's role (admin or regular user)
-      example: "admin"
-    created_at:
-      type: string
-      format: date-time
-      description: ISO 8601 timestamp of user creation
-      example: "2026-10-01T12:00:00.000Z"
-    updated_at:
-      type: string
-      format: date-time
-      description: ISO 8601 timestamp of last update
-      example: "2026-10-03T14:30:00.000Z"
-  required:
-    - id
-    - username
-    - role
-    - created_at
-    - updated_at
+type: object
+required: [users]
+properties:
+  users:
+    type: array
+    items:
+      type: object
+      required: [id, username, role, createdAt]
+      properties:
+        id:
+          type: integer
+          description: Unique user identifier
+          example: 1
+        username:
+          type: string
+          description: User's login username
+          example: "admin"
+        role:
+          type: string
+          description: User's role
+          example: "admin"
+        createdAt:
+          type: integer
+          format: int64
+          description: Unix timestamp of user creation
+          example: 1790856000
 ```
 
 **Example Response**:
 
 ```json
-[
-  {
-    "id": 1,
-    "username": "admin",
-    "role": "admin",
-    "created_at": "2026-10-01T12:00:00.000Z",
-    "updated_at": "2026-10-01T12:00:00.000Z"
-  },
-  {
-    "id": 2,
-    "username": "operator",
-    "role": "user",
-    "created_at": "2026-10-02T08:30:00.000Z",
-    "updated_at": "2026-10-03T14:30:00.000Z"
-  }
-]
+{
+  "users": [
+    {
+      "id": 1,
+      "username": "admin",
+      "role": "admin",
+      "createdAt": 1790856000
+    },
+    {
+      "id": 2,
+      "username": "operator",
+      "role": "user",
+      "createdAt": 1790929800
+    }
+  ]
+}
 ```
 
 #### Error Responses

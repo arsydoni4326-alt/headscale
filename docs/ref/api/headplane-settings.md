@@ -510,25 +510,27 @@ Settings endpoints may be rate-limited to prevent abuse:
 
 ## Database Schema
 
-Settings are stored in the Headplane SQLite database with the following schema:
+Settings are stored per Headplane user in the Headscale database:
 
 ```sql
 CREATE TABLE headplane_settings (
-  id INTEGER PRIMARY KEY CHECK (id = 1),  -- Single row constraint
-  api_key_encrypted TEXT,                 -- AES-256-GCM encrypted API key
-  api_key_nonce TEXT,                     -- Encryption nonce (base64)
-  theme TEXT DEFAULT 'light',             -- 'light' or 'dark'
-  profile_name TEXT,                      -- Optional display name
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  api_key_encrypted TEXT,
+  api_key_nonce TEXT,
+  api_key_salt TEXT,
+  theme TEXT DEFAULT "light",
+  profile_name TEXT,
+  updated_at DATETIME
 );
+CREATE UNIQUE INDEX idx_headplane_settings_user_id ON headplane_settings(user_id);
 ```
 
 **Notes**:
-- Single-row table enforces single-user model (Phase 13b)
-- `api_key_encrypted` and `api_key_nonce` are both required if API key is set
-- `theme` defaults to `'light'` if not set
-- `profile_name` is nullable (optional)
-- Multi-user support (Phase 13c) will require schema migration
+- The unique index allows one settings record per Headplane user.
+- `api_key_encrypted`, `api_key_nonce`, and `api_key_salt` are stored together when an API key is set.
+- `theme` defaults to `'light'` if not set.
+- `profile_name` is optional.
 
 ---
 
