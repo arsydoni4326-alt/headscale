@@ -14,11 +14,13 @@ const (
 )
 
 var (
-	ErrHeadplaneUserNotFound      = errors.New("headplane user not found")
-	ErrHeadplaneUserExists        = errors.New("headplane user already exists")
-	ErrInvalidUsername            = errors.New("invalid username")
-	ErrInvalidPassword            = errors.New("invalid password")
-	ErrHeadplaneUserNotAuthorized = errors.New("user not authorized")
+	ErrHeadplaneUserNotFound         = errors.New("headplane user not found")
+	ErrHeadplaneUserExists           = errors.New("headplane user already exists")
+	ErrInvalidUsername               = errors.New("invalid username")
+	ErrInvalidPassword               = errors.New("invalid password")
+	ErrHeadplaneUserNotAuthenticated = errors.New("user not authenticated")
+	ErrHeadplaneUserForbidden        = errors.New("user forbidden")
+	ErrHeadplanePasswordAuthRequired = errors.New("password authentication required")
 )
 
 // HeadplaneUser represents a Headplane UI user with credentials and role.

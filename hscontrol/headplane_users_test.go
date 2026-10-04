@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/juanfont/headscale/hscontrol/db"
+	"github.com/juanfont/headscale/hscontrol/state"
 	"github.com/juanfont/headscale/hscontrol/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,7 +23,7 @@ func TestMultiUserLogin(t *testing.T) {
 		},
 	}
 
-	hsdb := setupTestDB(t)
+	hsdb := setupTestDBForUsers(t)
 	defer hsdb.Close()
 
 	auth := NewHeadplaneAuth(cfg, hsdb)
@@ -88,7 +89,7 @@ func TestMultiUserLogin(t *testing.T) {
 }
 
 func TestPasswordHashing(t *testing.T) {
-	hsdb := setupTestDB(t)
+	hsdb := setupTestDBForUsers(t)
 	defer hsdb.Close()
 
 	user, err := db.CreateHeadplaneUser(hsdb.DB, "testuser", "mypassword", "user")
@@ -107,7 +108,7 @@ func TestPasswordHashing(t *testing.T) {
 
 func TestSessionManagement(t *testing.T) {
 	cfg := &types.Config{}
-	hsdb := setupTestDB(t)
+	hsdb := setupTestDBForUsers(t)
 	defer hsdb.Close()
 
 	auth := NewHeadplaneAuth(cfg, hsdb)
@@ -151,16 +152,21 @@ func TestSessionManagement(t *testing.T) {
 }
 
 func TestHandleGetUser(t *testing.T) {
-	hsdb := setupTestDB(t)
+	hsdb := setupTestDBForUsers(t)
 	defer hsdb.Close()
 
 	cfg := &types.Config{}
 	auth := NewHeadplaneAuth(cfg, hsdb)
+	
+	// Create a minimal state for testing
+	st, err := state.NewState(cfg)
+	require.NoError(t, err)
+	
 	app := &Headscale{
 		cfg:           cfg,
 		headplaneAuth: auth,
+		state:         st,
 	}
-	app.state = &mockState{db: hsdb}
 
 	adminToken := loginAndGetToken(t, auth, hsdb, "admin", "adminpass", "admin")
 	user, _ := db.CreateHeadplaneUser(hsdb.DB, "testuser", "password", "user")
@@ -218,7 +224,7 @@ func TestHandleGetUser(t *testing.T) {
 }
 
 func TestHandleUpdateUser(t *testing.T) {
-	hsdb := setupTestDB(t)
+	hsdb := setupTestDBForUsers(t)
 	defer hsdb.Close()
 
 	cfg := &types.Config{}
@@ -227,10 +233,13 @@ func TestHandleUpdateUser(t *testing.T) {
 		cfg:           cfg,
 		headplaneAuth: auth,
 	}
-	app.state = &mockState{db: hsdb}
+	st, err := state.NewState(cfg)
+	require.NoError(t, err)
+	app.state = st
 
 	adminToken := loginAndGetToken(t, auth, hsdb, "admin", "adminpass", "admin")
-	user, _ := db.CreateHeadplaneUser(hsdb.DB, "testuser", "password", "user")
+	_, err = db.CreateHeadplaneUser(hsdb.DB, "testuser", "password", "user")
+	require.NoError(t, err)
 
 	t.Run("update username successfully", func(t *testing.T) {
 		reqBody := UpdateUserRequest{Username: "newusername"}
@@ -270,7 +279,7 @@ func TestHandleUpdateUser(t *testing.T) {
 }
 
 func TestHandleDeleteUser_LastAdminProtection(t *testing.T) {
-	hsdb := setupTestDB(t)
+	hsdb := setupTestDBForUsers(t)
 	defer hsdb.Close()
 
 	cfg := &types.Config{}
@@ -279,7 +288,9 @@ func TestHandleDeleteUser_LastAdminProtection(t *testing.T) {
 		cfg:           cfg,
 		headplaneAuth: auth,
 	}
-	app.state = &mockState{db: hsdb}
+	st, err := state.NewState(cfg)
+	require.NoError(t, err)
+	app.state = st
 
 	adminToken := loginAndGetToken(t, auth, hsdb, "admin", "adminpass", "admin")
 
@@ -300,7 +311,7 @@ func TestHandleDeleteUser_LastAdminProtection(t *testing.T) {
 }
 
 func TestHandleDeleteUser_RegularUser(t *testing.T) {
-	hsdb := setupTestDB(t)
+	hsdb := setupTestDBForUsers(t)
 	defer hsdb.Close()
 
 	cfg := &types.Config{}
@@ -309,7 +320,9 @@ func TestHandleDeleteUser_RegularUser(t *testing.T) {
 		cfg:           cfg,
 		headplaneAuth: auth,
 	}
-	app.state = &mockState{db: hsdb}
+	st, err := state.NewState(cfg)
+	require.NoError(t, err)
+	app.state = st
 
 	adminToken := loginAndGetToken(t, auth, hsdb, "admin", "adminpass", "admin")
 	user, _ := db.CreateHeadplaneUser(hsdb.DB, "testuser", "password", "user")
@@ -328,8 +341,174 @@ func TestHandleDeleteUser_RegularUser(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	// Verify user is deleted
-	_, err := db.GetHeadplaneUserByID(hsdb.DB, user.ID)
-	assert.Equal(t, db.ErrHeadplaneUserNotFound, err)
+	_, errGet := db.GetHeadplaneUserByID(hsdb.DB, user.ID)
+	assert.Equal(t, db.ErrHeadplaneUserNotFound, errGet)
+}
+
+func TestErrorHandling_Unauthorized(t *testing.T) {
+	hsdb := setupTestDBForUsers(t)
+	defer hsdb.Close()
+
+	cfg := &types.Config{}
+	auth := NewHeadplaneAuth(cfg, hsdb)
+	app := &Headscale{
+		cfg:           cfg,
+		headplaneAuth: auth,
+	}
+	st, err := state.NewState(cfg)
+	require.NoError(t, err)
+	app.state = st
+
+	// Test 401 - No authentication token
+	req := httptest.NewRequest("GET", "/api/v1/headplane/users", nil)
+	w := httptest.NewRecorder()
+
+	app.HandleListUsers(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	
+	var errorResp map[string]string
+	errUnmarshal := json.Unmarshal(w.Body.Bytes(), &errorResp)
+	require.NoError(t, errUnmarshal)
+	assert.Equal(t, "unauthorized", errorResp["error"])
+	assert.Contains(t, errorResp["message"], "Authentication required")
+}
+
+func TestErrorHandling_Forbidden(t *testing.T) {
+	hsdb := setupTestDBForUsers(t)
+	defer hsdb.Close()
+
+	cfg := &types.Config{}
+	auth := NewHeadplaneAuth(cfg, hsdb)
+	app := &Headscale{
+		cfg:           cfg,
+		headplaneAuth: auth,
+	}
+	st, err := state.NewState(cfg)
+	require.NoError(t, err)
+	app.state = st
+
+	// Create a regular user (non-admin)
+	userToken := loginAndGetToken(t, auth, hsdb, "regularuser", "password", "user")
+
+	// Test 403 - Regular user trying to access admin endpoint
+	req := httptest.NewRequest("GET", "/api/v1/headplane/users", nil)
+	req.Header.Set("Authorization", userToken)
+	w := httptest.NewRecorder()
+
+	app.HandleListUsers(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	
+	var errorResp map[string]string
+	errUnmarshal := json.Unmarshal(w.Body.Bytes(), &errorResp)
+	require.NoError(t, errUnmarshal)
+	assert.Equal(t, "forbidden", errorResp["error"])
+	assert.Contains(t, errorResp["message"], "Admin privileges required")
+}
+
+func TestErrorHandling_InvalidToken(t *testing.T) {
+	hsdb := setupTestDBForUsers(t)
+	defer hsdb.Close()
+
+	cfg := &types.Config{}
+	auth := NewHeadplaneAuth(cfg, hsdb)
+	app := &Headscale{
+		cfg:           cfg,
+		headplaneAuth: auth,
+	}
+	st, err := state.NewState(cfg)
+	require.NoError(t, err)
+	app.state = st
+
+	// Test with invalid/expired token
+	req := httptest.NewRequest("GET", "/api/v1/headplane/users", nil)
+	req.Header.Set("Authorization", "invalid-token")
+	w := httptest.NewRecorder()
+
+	app.HandleListUsers(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	
+	var errorResp map[string]string
+	errUnmarshal := json.Unmarshal(w.Body.Bytes(), &errorResp)
+	require.NoError(t, errUnmarshal)
+	assert.Equal(t, "unauthorized", errorResp["error"])
+}
+
+func TestErrorHandling_AllEndpoints(t *testing.T) {
+	hsdb := setupTestDBForUsers(t)
+	defer hsdb.Close()
+
+	cfg := &types.Config{}
+	auth := NewHeadplaneAuth(cfg, hsdb)
+	app := &Headscale{
+		cfg:           cfg,
+		headplaneAuth: auth,
+	}
+	st, err := state.NewState(cfg)
+	require.NoError(t, err)
+	app.state = st
+
+	// Create a regular user (non-admin)
+	userToken := loginAndGetToken(t, auth, hsdb, "regularuser", "password", "user")
+
+	endpoints := []struct {
+		method string
+		path   string
+		body   interface{}
+		urlParam string
+	}{
+		{"GET", "/api/v1/headplane/users", nil, ""},
+		{"POST", "/api/v1/headplane/users", map[string]string{"username": "test", "password": "test", "role": "user"}, ""},
+		{"GET", "/api/v1/headplane/users/1", nil, "1"},
+		{"PUT", "/api/v1/headplane/users/1", map[string]string{"username": "test"}, "1"},
+		{"DELETE", "/api/v1/headplane/users/1", nil, "1"},
+	}
+
+	for _, ep := range endpoints {
+		t.Run(ep.method+" "+ep.path, func(t *testing.T) {
+			var body []byte
+			if ep.body != nil {
+				body, _ = json.Marshal(ep.body)
+			}
+
+			req := httptest.NewRequest(ep.method, ep.path, bytes.NewReader(body))
+			req.Header.Set("Authorization", userToken)
+			w := httptest.NewRecorder()
+
+			// Set URL params if needed
+			if ep.urlParam != "" {
+				rctx := chi.NewRouteContext()
+				rctx.URLParams.Add("id", ep.urlParam)
+				req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+			}
+
+			// Call appropriate handler
+			switch ep.method {
+			case "GET":
+				if ep.urlParam == "" {
+					app.HandleListUsers(w, req)
+				} else {
+					app.HandleGetUser(w, req)
+				}
+			case "POST":
+				app.HandleRegisterUser(w, req)
+			case "PUT":
+				app.HandleUpdateUser(w, req)
+			case "DELETE":
+				app.HandleDeleteUser(w, req)
+			}
+
+			// All should return 403 Forbidden for non-admin user
+			assert.Equal(t, http.StatusForbidden, w.Code)
+			
+			var errorResp map[string]string
+			errUnmarshal := json.Unmarshal(w.Body.Bytes(), &errorResp)
+			require.NoError(t, errUnmarshal)
+			assert.Equal(t, "forbidden", errorResp["error"])
+		})
+	}
 }
 
 func loginAndGetToken(t *testing.T, auth *HeadplaneAuth, hsdb *db.HSDatabase, username, password, role string) string {
@@ -351,7 +530,8 @@ func loginAndGetToken(t *testing.T, auth *HeadplaneAuth, hsdb *db.HSDatabase, us
 	return resp["token"].(string)
 }
 
-// mockState is a minimal State mock for testing
+// mockState is a minimal State mock for testing that only implements DB()
+// The tests only need DB access, not the full State interface
 type mockState struct {
 	db *db.HSDatabase
 }
@@ -360,8 +540,9 @@ func (m *mockState) DB() *db.HSDatabase {
 	return m.db
 }
 
-// setupTestDB creates an in-memory SQLite database for testing.
-func setupTestDB(t *testing.T) *db.HSDatabase {
+// setupTestDBForUsers creates an in-memory SQLite database for testing.
+func setupTestDBForUsers(t *testing.T) *db.HSDatabase {
+	t.Helper()
 	cfg := &types.Config{
 		Database: types.DatabaseConfig{
 			Type: types.DatabaseSqlite,

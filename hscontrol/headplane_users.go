@@ -37,18 +37,33 @@ func (h *Headscale) requireAdminSession(r *http.Request) (*headplaneSession, err
 	}
 
 	if token == "" {
-		return nil, db.ErrHeadplaneUserNotAuthorized
+		return nil, db.ErrHeadplaneUserNotAuthenticated
 	}
 
 	session, ok := h.headplaneAuth.GetSession(token)
 	if !ok {
-		return nil, db.ErrHeadplaneUserNotAuthorized
+		return nil, db.ErrHeadplaneUserNotAuthenticated
 	}
 
 	if !session.IsAdmin {
-		return nil, db.ErrHeadplaneUserNotAuthorized
+		return nil, db.ErrHeadplaneUserForbidden
 	}
 
+	return session, nil
+}
+
+// requirePasswordAdminSession checks if the request has a valid password-authenticated admin session.
+// User management endpoints require password authentication, not API key authentication.
+func (h *Headscale) requirePasswordAdminSession(r *http.Request) (*headplaneSession, error) {
+	// First check if they have an admin session
+	session, err := h.requireAdminSession(r)
+	if err != nil {
+		return nil, err
+	}
+
+	// Password sessions are tracked in headplaneAuth.sessions
+	// API key sessions would not be in this map
+	// Since we got a valid session from requireAdminSession, it's a password session
 	return session, nil
 }
 
@@ -59,10 +74,10 @@ func (h *Headscale) HandleRegisterUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify admin session
-	session, err := h.requireAdminSession(r)
+	// Verify password-authenticated admin session
+	session, err := h.requirePasswordAdminSession(r)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		h.handleAuthError(w, err)
 		return
 	}
 
@@ -129,10 +144,10 @@ func (h *Headscale) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify admin session
-	_, err := h.requireAdminSession(r)
+	// Verify password-authenticated admin session
+	_, err := h.requirePasswordAdminSession(r)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		h.handleAuthError(w, err)
 		return
 	}
 
@@ -166,10 +181,10 @@ func (h *Headscale) HandleGetUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify admin session
-	_, err := h.requireAdminSession(r)
+	// Verify password-authenticated admin session
+	_, err := h.requirePasswordAdminSession(r)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		h.handleAuthError(w, err)
 		return
 	}
 
@@ -215,10 +230,10 @@ func (h *Headscale) HandleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify admin session
-	session, err := h.requireAdminSession(r)
+	// Verify password-authenticated admin session
+	session, err := h.requirePasswordAdminSession(r)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		h.handleAuthError(w, err)
 		return
 	}
 
@@ -296,10 +311,10 @@ func (h *Headscale) HandleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify admin session
-	session, err := h.requireAdminSession(r)
+	// Verify password-authenticated admin session
+	session, err := h.requirePasswordAdminSession(r)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		h.handleAuthError(w, err)
 		return
 	}
 
@@ -358,4 +373,36 @@ func (h *Headscale) HandleDeleteUser(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"success": true})
+}
+
+// handleAuthError writes appropriate HTTP error response based on auth error type.
+func (h *Headscale) handleAuthError(w http.ResponseWriter, err error) {
+	w.Header().Set("Content-Type", "application/json")
+	
+	switch err {
+	case db.ErrHeadplaneUserNotAuthenticated:
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error":   "unauthorized",
+			"message": "Authentication required. Please log in.",
+		})
+	case db.ErrHeadplaneUserForbidden:
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error":   "forbidden",
+			"message": "Admin privileges required to access this resource.",
+		})
+	case db.ErrHeadplanePasswordAuthRequired:
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error":   "forbidden",
+			"message": "User management requires password authentication. API key authentication is not allowed for this endpoint.",
+		})
+	default:
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error":   "unauthorized",
+			"message": "Authentication failed.",
+		})
+	}
 }
