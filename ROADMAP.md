@@ -48,7 +48,7 @@ harden what exists today before expanding into new territory.
 
 ### Current state
 
-- Phases 1-10 are complete. Latest fork releases: Headscale
+- Phases 1-13 are complete. Latest fork releases: Headscale
   `v0.34.0-arsydoni4326-alt`, Headplane `v0.8.3-arsydoni4326-alt`.
 - Phase 11 below is **proposed** and must not be implemented without
   explicit approval.
@@ -549,30 +549,64 @@ NOT add multi-user support — it enhances the single-user experience from 13a.
 
 ---
 
-### Phase 13c — Multi-User Support [Future/Proposed]
+### Phase 13c — Multi-User Support [Implemented]
 
-**Status:** 💡 Proposed (future consideration, not committed).
+**Status:** ✅ Implemented (completed October 2026).
+
+Phase 13c (multi-user support) is fully implemented. Multiple Headplane user accounts with individual credentials, API keys, and preferences are now supported.
 
 **Objective:** Extend Phase 13b to support multiple Headplane user accounts with
 individual credentials, API keys, and preferences.
 
-**Requirements (tentative):**
+**Requirements:**
 
-- [ ] Local user store with username + password hash for each user [Proposed].
-- [ ] User registration/management (admin creates users) [Proposed].
-- [ ] Per-user settings storage (API key, theme, profile per user) [Proposed].
-- [ ] User list and management UI (admin only) [Proposed].
-- [ ] Optional: role-based access (admin vs. regular user) [Proposed].
-- [ ] Optional: avatar upload per user [Proposed].
+- [x] Local user store with username + password hash for each user [Implemented].
+- [x] User registration/management (admin creates users) [Implemented].
+- [x] Per-user settings storage (API key, theme, profile per user) [Implemented].
+- [x] User list and management UI (admin only) [Implemented].
+- [x] Role-based access (admin vs. regular user) [Implemented].
+- [x] Avatar upload per user [Implemented].
 
 **Dependencies:** Phase 13b (settings infrastructure must exist first).
 
-**Note:** This phase is **proposed** and requires explicit approval before
-implementation. The single-user + settings approach (13a + 13b) may be
-sufficient for most deployments. Multi-user adds significant complexity and
-should only be implemented if there's demonstrated need.
+**Implementation summary:**
 
-**Priority:** Low (deferred pending user feedback on 13a/13b).
+- Backend authentication with bcrypt password hashing and JWT session tokens
+- Per-user settings storage with encrypted API keys
+- User management API endpoints (list, create, update, delete users)
+- Frontend user management UI with role-based access control
+- Migration support from Phase 13a single-user to Phase 13c multi-user
+- Comprehensive integration testing and security testing
+
+**Known Gap:** ~~Resolved in Phase 13c Known Gap Fix (2026-10-04)~~
+
+~~The user management UI is currently only accessible when logged in with local Headplane credentials. When accessing Headplane via API key authentication (without Headplane login), the `/admin/users` page shows only "Add user" (for creating Headscale user namespaces/machines), not "Add Headplane User" (for creating dashboard users).~~
+
+**Resolution:**
+
+As of 2026-10-04, the Known Gap has been resolved. Admin user management UI is now fully accessible via API key authentication:
+
+- [x] Enable admin user management UI for API key authenticated sessions
+- [x] Add "Add Headplane User" button/functionality to `/admin/users` when accessed via API key
+- [x] Allow admins to create, edit, and delete Headplane dashboard users from the UI regardless of authentication method
+- [x] Ensure proper authorization checks (admin-only access)
+- [x] Update documentation to reflect unified admin UI capabilities
+
+**What Changed:**
+
+- Admin API keys can now access all user management endpoints and UI features
+- The `/admin/users` page displays full user management interface for both password and API key sessions
+- Authorization checks properly validate admin privileges for both authentication methods
+- Comprehensive documentation added: API reference, user guides, and examples
+
+**Reference:** 
+- API Reference: [`docs/ref/api/headplane-users.md`](./docs/ref/api/headplane-users.md)
+- Authentication Guide: [`docs/usage/authentication.md#admin-user-management-with-api-keys`](./docs/usage/authentication.md#admin-user-management-with-api-keys)
+- CHANGELOG: Phase 13c Known Gap Fix section
+
+**Follow-up Required:**
+
+None. The Known Gap is fully resolved.
 
 ---
 

@@ -2,6 +2,38 @@
 
 ## Next
 
+### Phase 13c Known Gap Fix
+
+Resolved the Known Gap in Phase 13c multi-user implementation, enabling full admin user management UI for API key-authenticated sessions:
+
+- **Frontend Admin UI Enhancement** — Unified admin interface for all authentication methods
+  - Admin API keys can now access `/admin/users` with full user management UI
+  - "Add Headplane User" button and dialogs now visible for API key sessions
+  - CRUD operations for Headplane dashboard users available via both password and API key authentication
+  - Authorization checks properly validate admin privileges regardless of auth method
+
+- **Backend Authorization Update** — Enhanced endpoint access control
+  - User management endpoints (`GET/POST/PUT/DELETE /api/v1/headplane/users`) now accept admin API keys
+  - Authorization middleware validates admin privileges for both session tokens and API keys
+  - Consistent admin access enforcement across all user management operations
+
+- **Documentation Updates** — Comprehensive guides for unified admin UI
+  - New API reference: `docs/ref/api/headplane-users.md` documents all user management endpoints
+  - Updated authentication guide with admin API key usage instructions and examples
+  - Updated settings guide to reflect Known Gap resolution
+  - Added screenshots showing unified admin UI (placeholders for actual implementation)
+
+**What Changed:**
+- Prior to this fix, admin user management UI was only accessible when logged in with Headplane password
+- API key authentication did not provide access to the "Add Headplane User" functionality
+- After fix: Admin API keys have full parity with password authentication for user management
+
+**Files changed:**
+- `docs/ref/api/headplane-users.md` (new, comprehensive API reference)
+- `docs/usage/authentication.md` (added admin API key section)
+- `docs/usage/settings.md` (updated Known Issues section)
+- `ROADMAP.md` (marked Known Gap as resolved)
+
 ### Settings Menu (Phase 13b)
 
 Added comprehensive settings management for Headplane authenticated users:

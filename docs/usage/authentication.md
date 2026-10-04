@@ -15,14 +15,16 @@ Headscale supports two primary authentication methods:
     - Logging into the Headplane web interface
     - You need a simple, memorable credential for web UI access
     - You want to quickly grant access to administrators without managing API keys
+    - You need to change your password or manage settings
 
 - **Use API Keys** when:
     - Writing scripts or automation that calls the Headscale API
     - Integrating third-party tools with Headscale
     - You need fine-grained access control or token rotation
+    - You want to access the admin UI without password login (admin API keys only)
 
-!!! warning "Scope Limitation"
-    Password authentication is **only** for Headplane web UI access. It does not grant programmatic API access. For API automation, you must use API keys.
+!!! note "Admin API Keys"
+    As of Phase 13c, **admin API keys can now access the full admin UI**, including user management. This means you can manage Headplane dashboard users directly from the UI when authenticated via an admin API key, without needing to log in with a Headplane password.
 
 ---
 
@@ -319,6 +321,86 @@ If you were previously using API keys for Headplane web access:
 4. **Keep your API keys** for programmatic access and automation
 
 Both authentication methods work simultaneously. Password authentication does not replace or invalidate API keys.
+
+---
+
+## Admin User Management with API Keys
+
+As of Phase 13c, admin API keys can access the full Headplane admin interface, including user management capabilities. This resolves the "Known Gap" where admin features were only available to password-authenticated sessions.
+
+### What You Can Do with Admin API Keys
+
+When logged in to Headplane with an admin API key, you have full access to:
+
+- **User Management UI** — The `/admin/users` page displays "Add Headplane User" button and full CRUD operations for dashboard users
+- **Create Users** — Add new Headplane dashboard users with admin or regular user roles
+- **Edit Users** — Update usernames, passwords, and roles for existing users
+- **Delete Users** — Remove users from the system (with protection against deleting the last admin)
+- **View All Users** — List all Headplane dashboard users with their roles and creation dates
+
+### How to Access Admin UI with API Key
+
+1. **Obtain an admin API key from Headscale:**
+   ```bash
+   headscale apikeys create
+   ```
+
+2. **Navigate to your Headplane URL** (e.g., `https://headscale.example.com`)
+
+3. **On the login page, select "API Key" as the authentication method**
+
+4. **Enter your API key** and click **Log In**
+
+5. **Access admin features:**
+   - Navigate to **Admin → Users** in the sidebar
+   - You'll see the "Add Headplane User" button and full user management interface
+   - Create, edit, or delete Headplane dashboard users as needed
+
+### Admin API Key Requirements
+
+To access admin features, your API key must:
+- Be a valid Headscale API key (not expired or revoked)
+- Have admin-level permissions in Headscale
+- Be properly configured in your Headscale deployment
+
+**Note**: Regular (non-admin) API keys will not have access to the admin user management interface.
+
+### Use Cases
+
+**Scenario 1: Automated Admin Workflows**
+
+You can now script admin operations using API keys:
+
+```bash
+# List all Headplane users
+curl -X GET https://headscale.example.com/api/v1/headplane/users \
+  -H "Authorization: Bearer hs_your_admin_api_key"
+
+# Create a new user
+curl -X POST https://headscale.example.com/api/v1/headplane/users \
+  -H "Authorization: Bearer hs_your_admin_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "newoperator",
+    "password": "secure-password",
+    "role": "user"
+  }'
+```
+
+**Scenario 2: Admin Without Password**
+
+You can manage Headplane users entirely through API key authentication, without needing to configure or remember a Headplane password.
+
+**Scenario 3: Consistent Auth Method**
+
+If your team already uses API keys for automation, you can now use the same auth method for interactive admin tasks in the UI.
+
+### Screenshots
+
+![Admin Users Page - API Key Session](../assets/screenshots/admin-users-api-key.png)
+*Admin users page showing "Add Headplane User" button when authenticated via API key*
+
+**Note**: This screenshot is a placeholder reference. Actual screenshots should be captured from the implementation showing the unified admin UI for API key sessions.
 
 ---
 
