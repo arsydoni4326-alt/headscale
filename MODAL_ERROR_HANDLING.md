@@ -65,10 +65,12 @@ if ("error" in loaderData && loaderData.error) {
 
 ### Error Messages
 
+**Note:** As of Phase 13c Known Gap Fix (2026-10-04), API key admins now have full access to user management. The API key restriction documented below is no longer enforced.
+
 | Scenario | Status | Message |
 |----------|--------|---------|
 | No admin capability | 403 | You do not have permission to manage users. Only administrators can access this page. |
-| API key login | 403 | User management is only available for password-authenticated administrators. Please log out and log in with your password instead of an API key. |
+| ~~API key login~~ (REMOVED) | ~~403~~ | ~~User management is only available for password-authenticated administrators. Please log out and log in with your password instead of an API key.~~ |
 | Backend fetch error | 401/500 | (Backend error message) |
 | Network error | 500 | An unexpected error occurred |
 

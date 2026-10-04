@@ -1,10 +1,27 @@
 # Error Handling Improvement Summary
 
 **Date:** 2026-10-04  
-**Task:** Improve error handling for admin user management routes
+**Status:** SUPERSEDED by Phase 13c Known Gap Fix (same date)
 
-## Problem
-When API key sessions tried to access `/admin/admin/users` (user management UI), the server returned a generic 500 Internal Server Error instead of a proper 403 Forbidden with a clear error message explaining that password authentication is required.
+**IMPORTANT:** This document describes error handling that was implemented but immediately superseded. As of 2026-10-04, API key admins now have full access to user management (Phase 13c Known Gap Fix). The password-only restriction documented here is no longer enforced.
+
+---
+
+## Original Problem (Now Resolved)
+When API key sessions tried to access `/admin/users` (user management UI), the server returned a generic 500 Internal Server Error instead of a proper 403 Forbidden with a clear error message explaining that password authentication is required.
+
+**Resolution:** The password authentication requirement was removed. API key admins now have full access to all user management endpoints and UI.
+
+## HTTP Status Semantics (Updated)
+
+**Note:** The "API key session" row below is no longer applicable.
+
+| Scenario | Status | Error | Message |
+|----------|--------|-------|---------|
+| No auth token | 401 | unauthorized | Authentication required. Please log in. |
+| Invalid token | 401 | unauthorized | Authentication required. Please log in. |
+| Non-admin user | 403 | forbidden | Admin privileges required to access this resource. |
+| ~~API key session~~ (REMOVED) | ~~403~~ | ~~forbidden~~ | ~~User management requires password authentication. API key authentication is not allowed for this endpoint.~~ |
 
 ## Solution Implemented
 
