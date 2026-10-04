@@ -326,9 +326,10 @@ error; it breaks Headplane authentication, user management, and settings.
 
 **Resolution:**
 
-Upgrade to a build containing the Headplane schema repair migration. It defines
-both tables in the canonical schema and recreates either table if it was removed
-by the earlier workaround.
+Upgrade to a build containing the Headplane schema repair migrations. They define
+both tables in the canonical schema, recreate either table if it was removed by
+the earlier workaround, and normalize indexes previously created by GORM with
+quoted identifiers.
 
 1. Stop Headscale and back up the database:
 
@@ -349,7 +350,12 @@ by the earlier workaround.
 
    ```bash
    sqlite3 /var/lib/headscale/db.sqlite <<'EOF'
-   SELECT id FROM migrations WHERE id = '202610050900-repair-headplane-schema';
+   SELECT id FROM migrations
+   WHERE id IN (
+     '202610050900-repair-headplane-schema',
+     '202610050930-normalize-headplane-indexes'
+   )
+   ORDER BY id;
    SELECT name FROM sqlite_master
    WHERE type IN ('table', 'index')
      AND name IN (

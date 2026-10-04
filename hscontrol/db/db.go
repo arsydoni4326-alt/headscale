@@ -35,6 +35,8 @@ const sqliteDialect = "sqlite"
 
 const headplaneSchemaRepairMigrationID = "202610050900-repair-headplane-schema"
 
+const headplaneIndexNormalizationMigrationID = "202610050930-normalize-headplane-indexes"
+
 func init() {
 	schema.RegisterSerializer("text", TextSerialiser{})
 }
@@ -796,6 +798,15 @@ WHERE tags IS NOT NULL AND tags != '[]' AND tags != '' AND tags != 'null'
 				ID: headplaneSchemaRepairMigrationID,
 				Migrate: func(tx *gorm.DB) error {
 					return repairHeadplaneSchema(tx, cfg)
+				},
+				Rollback: func(db *gorm.DB) error { return nil },
+			},
+			{
+				// GORM created the Headplane indexes with quoted identifiers,
+				// which does not match the canonical SQLite schema text.
+				ID: headplaneIndexNormalizationMigrationID,
+				Migrate: func(tx *gorm.DB) error {
+					return normalizeHeadplaneIndexes(tx)
 				},
 				Rollback: func(db *gorm.DB) error { return nil },
 			},

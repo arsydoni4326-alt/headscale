@@ -915,7 +915,7 @@ func TestHeadplaneSchemaRecoveryPreservesExistingUsers(t *testing.T) {
 	assert.Equal(t, "Operator", settings.ProfileName)
 }
 
-func TestHeadplaneSchemaValidationAcceptsLegacyGORMTables(t *testing.T) {
+func TestHeadplaneIndexNormalization(t *testing.T) {
 	dbPath := t.TempDir() + "/headscale_test.db"
 	cfg := sqliteTestConfig(dbPath)
 
@@ -927,12 +927,11 @@ func TestHeadplaneSchemaValidationAcceptsLegacyGORMTables(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, stmt := range []string{
-		`DROP TABLE headplane_settings`,
-		`DROP TABLE headplane_users`,
-		`CREATE TABLE headplane_users (id integer PRIMARY KEY AUTOINCREMENT, username text NOT NULL, password_hash text NOT NULL, role text DEFAULT "user", created_at datetime, updated_at datetime)`,
-		`CREATE UNIQUE INDEX idx_headplane_users_username ON headplane_users(username)`,
-		`CREATE TABLE headplane_settings (id integer PRIMARY KEY AUTOINCREMENT, user_id integer NOT NULL, api_key_encrypted text, api_key_nonce text, api_key_salt text, theme text DEFAULT "light", profile_name text, updated_at datetime)`,
-		`CREATE UNIQUE INDEX idx_headplane_settings_user_id ON headplane_settings(user_id)`,
+		`DROP INDEX idx_headplane_settings_user_id`,
+		`DROP INDEX idx_headplane_users_username`,
+		"CREATE UNIQUE INDEX `idx_headplane_users_username` ON `headplane_users`(`username`)",
+		"CREATE UNIQUE INDEX `idx_headplane_settings_user_id` ON `headplane_settings`(`user_id`)",
+		`DELETE FROM migrations WHERE id = '` + headplaneIndexNormalizationMigrationID + `'`,
 	} {
 		_, err := raw.ExecContext(t.Context(), stmt)
 		require.NoError(t, err, stmt)
@@ -942,6 +941,16 @@ func TestHeadplaneSchemaValidationAcceptsLegacyGORMTables(t *testing.T) {
 	hsdb, err = NewHeadscaleDatabase(cfg)
 	require.NoError(t, err)
 	defer hsdb.Close()
+
+	for _, index := range headplaneIndexes {
+		var current string
+		require.NoError(
+			t,
+			hsdb.DB.Raw(`SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?`, index.name).
+				Scan(&current).Error,
+		)
+		assert.Equal(t, index.ddl, current)
+	}
 }
 
 // TestSQLiteMigrationKeepsPreAuthKeySequence deletes keys before the upgrade
