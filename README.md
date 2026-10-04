@@ -1,6 +1,6 @@
 ![headscale logo](./docs/assets/logo/headscale3_header_stacked_left.png)
 
-![ci](https://github.com/juanfont/headscale/actions/workflows/test.yml/badge.svg)
+![ci](https://github.com/arsydoni4326-alt/headscale/actions/workflows/test.yml/badge.svg)
 
 An open source, self-hosted implementation of the Tailscale control server.
 
@@ -190,8 +190,8 @@ The Makefile will warn you if any required tools are missing and suggest running
 
 ## Contributors
 
-<a href="https://github.com/juanfont/headscale/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=juanfont/headscale" />
+<a href="https://github.com/arsydoni4326-alt/headscale/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=arsydoni4326-alt/headscale" />
 </a>
 
 Made with [contrib.rocks](https://contrib.rocks).
