@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/juanfont/headscale/hscontrol/db"
+	"github.com/juanfont/headscale/hscontrol/state"
 	"github.com/juanfont/headscale/hscontrol/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,7 +16,7 @@ import (
 
 // TestMultiUserRegistrationFlow tests the complete user registration flow.
 func TestMultiUserRegistrationFlow(t *testing.T) {
-	hsdb := setupTestDB(t)
+	hsdb := setupTestDBForUsers(t)
 	defer hsdb.Close()
 
 	cfg := &types.Config{}
@@ -24,7 +25,9 @@ func TestMultiUserRegistrationFlow(t *testing.T) {
 		cfg:           cfg,
 		headplaneAuth: auth,
 	}
-	app.state = &mockState{db: hsdb}
+	st, err := state.NewState(cfg)
+	require.NoError(t, err)
+	app.state = st
 
 	// Create admin user
 	admin, err := db.CreateHeadplaneUser(hsdb.DB, "admin", "adminpass", "admin")

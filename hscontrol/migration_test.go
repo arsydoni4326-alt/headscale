@@ -4,11 +4,8 @@ import (
 	"testing"
 
 	"github.com/juanfont/headscale/hscontrol/db"
-	"github.com/juanfont/headscale/hscontrol/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 )
 
 // TestMigrationFromSingleToMultiUser tests migration from single-user to multi-user mode.
@@ -16,7 +13,7 @@ func TestMigrationFromSingleToMultiUser(t *testing.T) {
 	// This test simulates upgrading from Phase 13a (single password) to Phase 13c (multi-user)
 	
 	t.Run("default admin user creation", func(t *testing.T) {
-		hsdb := setupTestDB(t)
+		hsdb := setupTestDBForUsers(t)
 		defer hsdb.Close()
 
 		// Simulate first startup with multi-user support
@@ -39,7 +36,7 @@ func TestMigrationFromSingleToMultiUser(t *testing.T) {
 	})
 
 	t.Run("settings migration preserves data", func(t *testing.T) {
-		hsdb := setupTestDB(t)
+		hsdb := setupTestDBForUsers(t)
 		defer hsdb.Close()
 
 		// Create a user
@@ -59,7 +56,7 @@ func TestMigrationFromSingleToMultiUser(t *testing.T) {
 	})
 
 	t.Run("table schemas are correct", func(t *testing.T) {
-		hsdb := setupTestDB(t)
+		hsdb := setupTestDBForUsers(t)
 		defer hsdb.Close()
 
 		// Verify headplane_users table exists with correct columns
@@ -78,7 +75,7 @@ func TestMigrationFromSingleToMultiUser(t *testing.T) {
 
 // TestDatabaseSchema tests the database schema for multi-user support.
 func TestDatabaseSchema(t *testing.T) {
-	hsdb := setupTestDB(t)
+	hsdb := setupTestDBForUsers(t)
 	defer hsdb.Close()
 
 	t.Run("headplane_users table structure", func(t *testing.T) {

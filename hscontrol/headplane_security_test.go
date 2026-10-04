@@ -12,7 +12,7 @@ import (
 
 // TestSessionSecurity tests session security features.
 func TestSessionSecurity(t *testing.T) {
-	hsdb := setupTestDB(t)
+	hsdb := setupTestDBForUsers(t)
 	defer hsdb.Close()
 
 	cfg := &types.Config{}
@@ -62,7 +62,7 @@ func TestSessionSecurity(t *testing.T) {
 
 // TestPasswordSecurity tests password hashing and validation.
 func TestPasswordSecurity(t *testing.T) {
-	hsdb := setupTestDB(t)
+	hsdb := setupTestDBForUsers(t)
 	defer hsdb.Close()
 
 	t.Run("passwords are hashed", func(t *testing.T) {

@@ -1,22 +1,17 @@
 package hscontrol
 
 import (
-	"bytes"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/juanfont/headscale/hscontrol/db"
-	"github.com/juanfont/headscale/hscontrol/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
-func setupTestDB(t *testing.T) *gorm.DB {
+func setupTestDBForSettings(t *testing.T) *gorm.DB {
 	t.Helper()
 	dbConn, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
@@ -55,7 +50,7 @@ func TestEncryptDecryptAPIKey(t *testing.T) {
 }
 
 func TestGetSettings_AutoCreate(t *testing.T) {
-	dbConn := setupTestDB(t)
+	dbConn := setupTestDBForSettings(t)
 	user := createTestUser(t, dbConn, "testuser", "password", "user")
 
 	// Get settings should auto-create
@@ -67,7 +62,7 @@ func TestGetSettings_AutoCreate(t *testing.T) {
 }
 
 func TestPerUserIsolation(t *testing.T) {
-	dbConn := setupTestDB(t)
+	dbConn := setupTestDBForSettings(t)
 	user1 := createTestUser(t, dbConn, "user1", "password1", "user")
 	user2 := createTestUser(t, dbConn, "user2", "password2", "user")
 

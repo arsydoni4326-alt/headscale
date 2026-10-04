@@ -7,18 +7,22 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/juanfont/headscale/hscontrol/db"
 	"github.com/juanfont/headscale/hscontrol/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestHeadplaneAuth_HandleLogin_NoPassword(t *testing.T) {
+	hsdb := setupTestDBForAuth(t)
+	defer hsdb.Close()
+	
 	cfg := &types.Config{
 		Headplane: types.HeadplaneConfig{
 			Password: "",
 		},
 	}
-	auth := NewHeadplaneAuth(cfg)
+	auth := NewHeadplaneAuth(cfg, hsdb)
 
 	body := `{"password":"test"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/headplane/login", bytes.NewBufferString(body))
@@ -30,12 +34,15 @@ func TestHeadplaneAuth_HandleLogin_NoPassword(t *testing.T) {
 }
 
 func TestHeadplaneAuth_HandleLogin_Success(t *testing.T) {
+	hsdb := setupTestDBForAuth(t)
+	defer hsdb.Close()
+	
 	cfg := &types.Config{
 		Headplane: types.HeadplaneConfig{
 			Password: "test-password",
 		},
 	}
-	auth := NewHeadplaneAuth(cfg)
+	auth := NewHeadplaneAuth(cfg, hsdb)
 
 	body := `{"password":"test-password"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/headplane/login", bytes.NewBufferString(body))
@@ -57,12 +64,15 @@ func TestHeadplaneAuth_HandleLogin_Success(t *testing.T) {
 }
 
 func TestHeadplaneAuth_HandleLogin_InvalidPassword(t *testing.T) {
+	hsdb := setupTestDBForAuth(t)
+	defer hsdb.Close()
+	
 	cfg := &types.Config{
 		Headplane: types.HeadplaneConfig{
 			Password: "correct-password",
 		},
 	}
-	auth := NewHeadplaneAuth(cfg)
+	auth := NewHeadplaneAuth(cfg, hsdb)
 
 	body := `{"password":"wrong-password"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/headplane/login", bytes.NewBufferString(body))
@@ -74,12 +84,15 @@ func TestHeadplaneAuth_HandleLogin_InvalidPassword(t *testing.T) {
 }
 
 func TestHeadplaneAuth_HandleLogin_RateLimit(t *testing.T) {
+	hsdb := setupTestDBForAuth(t)
+	defer hsdb.Close()
+	
 	cfg := &types.Config{
 		Headplane: types.HeadplaneConfig{
 			Password: "test-password",
 		},
 	}
-	auth := NewHeadplaneAuth(cfg)
+	auth := NewHeadplaneAuth(cfg, hsdb)
 
 	// Make maxLoginAttempts failed attempts
 	for i := 0; i < maxLoginAttempts; i++ {
@@ -103,13 +116,34 @@ func TestHeadplaneAuth_HandleLogin_RateLimit(t *testing.T) {
 }
 
 func TestHeadplaneAuth_VerifySession_Expired(t *testing.T) {
+	hsdb := setupTestDBForAuth(t)
+	defer hsdb.Close()
+	
 	cfg := &types.Config{
 		Headplane: types.HeadplaneConfig{
 			Password: "test",
 		},
 	}
-	auth := NewHeadplaneAuth(cfg)
+	auth := NewHeadplaneAuth(cfg, hsdb)
 
 	// Verify non-existent session
 	assert.False(t, auth.VerifySession("nonexistent-token"))
+}
+
+// setupTestDBForAuth creates an in-memory database for auth tests
+func setupTestDBForAuth(t *testing.T) *db.HSDatabase {
+	t.Helper()
+	cfg := &types.Config{
+		Database: types.DatabaseConfig{
+			Type: types.DatabaseSqlite,
+			Sqlite: types.SqliteConfig{
+				Path: ":memory:",
+			},
+		},
+	}
+
+	hsdb, err := db.NewHeadscaleDatabase(cfg)
+	require.NoError(t, err)
+
+	return hsdb
 }
