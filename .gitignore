@@ -62,3 +62,5 @@ package.json
 session.md
 INITIAL_PROMPT.md
 AGENT_INSTRUCTIONS.md
+TASK*.md
+PHASE*.md
