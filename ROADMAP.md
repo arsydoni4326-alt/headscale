@@ -48,8 +48,10 @@ harden what exists today before expanding into new territory.
 
 ### Current state
 
-- Phases 1-13 are complete. Latest fork releases: Headscale
-  `v0.34.0-arsydoni4326-alt`, Headplane `v0.8.3-arsydoni4326-alt`.
+- Phases 1-12 are complete. Phase 13 is partially implemented; the planned
+  Phase 13c migration replaces Headscale-backed multi-user local authentication
+  with one Headplane-configured local administrator. Latest fork releases:
+  Headscale `v0.34.0-arsydoni4326-alt`, Headplane `v0.8.3-arsydoni4326-alt`.
 - Phase 11 below is **proposed** and must not be implemented without
   explicit approval.
 - Phase 12 is **partially implemented**: the backend approval API is done; the
@@ -432,7 +434,9 @@ UI.
 
 ## Phase 13 — Headplane Local Authentication and Settings
 
-**Status:** Partially implemented (13a complete, 13b planned, 13c future).
+**Status:** Partially implemented. Phases 13a and 13b shipped under a
+superseded Headscale-backed local-account design. Phase 13c replaces that
+design with a single local Headplane administrator and a safe migration path.
 
 **Objective:** Provide a local authentication system for Headplane that is
 entirely independent from Headscale API authentication. After successful login,
@@ -441,9 +445,10 @@ and customize their Headplane experience.
 
 **Important note:** This phase was originally titled "Simple Password Login for
 Headplane" and was partially implemented (commits 8e2131bf-966978f9) with a
-simplified single-password approach. The full scope requires a Settings menu and
-eventual multi-user support. We're taking an incremental approach (13a → 13b →
-13c) to deliver value progressively.
+simplified single-password approach. A later multi-user implementation moved
+local accounts into the Headscale database. That model is now superseded: this
+fork supports one local Headplane administrator, while Headscale API keys remain
+the secondary authentication method.
 
 ---
 
@@ -549,64 +554,131 @@ NOT add multi-user support — it enhances the single-user experience from 13a.
 
 ---
 
-### Phase 13c — Multi-User Support [Implemented]
+### Phase 13c — Single Local Administrator Migration [Planned]
 
-**Status:** ✅ Implemented (completed October 2026).
+**Status:** Planned. This phase supersedes the Headscale database-backed
+multi-user local-auth implementation completed in October 2026.
 
-Phase 13c (multi-user support) is fully implemented. Multiple Headplane user accounts with individual credentials, API keys, and preferences are now supported.
+**Objective:** Support exactly one local Headplane administrator with
+username/password login as the primary method and Headscale API-key login as the
+secondary method. Local administrator credentials must belong to Headplane, not
+to Headscale's database or configuration.
 
-**Objective:** Extend Phase 13b to support multiple Headplane user accounts with
-individual credentials, API keys, and preferences.
+**Scope decision:**
 
-**Requirements:**
+- Headplane supports one local administrator only; it does not support local
+  account creation, role assignment, user deletion, or per-user preferences.
+- Existing OIDC and proxy-auth code remains in the repository but is disabled by
+  this mode. This release provides no user-facing configuration to re-enable it.
+- Headscale users, nodes, policies, and Headscale API keys remain independent of
+  the local Headplane administrator.
+- The current `headplane_users` and `headplane_settings` database records are
+  retained during the migration window for rollback, but are no longer used for
+  local Headplane authentication.
 
-- [x] Local user store with username + password hash for each user [Implemented].
-- [x] User registration/management (admin creates users) [Implemented].
-- [x] Per-user settings storage (API key, theme, profile per user) [Implemented].
-- [x] User list and management UI (admin only) [Implemented].
-- [x] Role-based access (admin vs. regular user) [Implemented].
-- [x] Avatar upload per user [Implemented].
+**Configuration and authentication requirements:**
 
-**Dependencies:** Phase 13b (settings infrastructure must exist first).
+- [ ] Add a required `user` section to Headplane's `config.yaml`:
+  ```yaml
+  user:
+    username: admin
+    password: "$2b$12$..." # bcrypt verification hash; never plaintext
+  ```
+- [ ] Validate a non-empty administrator username and a supported bcrypt hash at
+  Headplane startup. Reject plaintext passwords and malformed hashes.
+- [ ] Use bcrypt cost 12 to verify local passwords and to hash new passwords.
+- [ ] Move password verification, rate limiting, session issuance, and session
+  invalidation into Headplane; do not call Headscale's local password endpoints.
+- [ ] Preserve Headscale API-key login as an independent secondary login method.
+- [ ] Require a configured `headscale.api_key` for local-password sessions to
+  access Headscale data, with a clear configuration error when it is absent.
+- [ ] Disable OIDC and proxy authentication in this mode without deleting their
+  code or unrelated persistent identity data.
 
-**Implementation summary:**
+**Administration UI requirements:**
 
-- Backend authentication with bcrypt password hashing and JWT session tokens
-- Per-user settings storage with encrypted API keys
-- User management API endpoints (list, create, update, delete users)
-- Frontend user management UI with role-based access control
-- Migration support from Phase 13a single-user to Phase 13c multi-user
-- Comprehensive integration testing and security testing
+- [ ] Keep `/admin/users` as a stable route, but replace user CRUD with a
+  single-administrator Administration page.
+- [ ] Clearly state in the UI that only one local administrator is supported
+  after migration.
+- [ ] Provide a password reset/change form requiring the current password, a
+  confirmation, atomic config update, bcrypt rehash, and invalidation of all
+  existing password sessions.
+- [ ] When the configuration source is immutable or externally managed, disable
+  the UI reset flow and provide precise operator recovery instructions instead.
+- [ ] Provide API-key list, creation, rotation, expiry/revocation, and deletion
+  controls using Headscale's existing API-key endpoints.
+- [ ] Mask API-key secrets by default and display a newly created key only once.
+- [ ] Prevent direct revocation or deletion of the API key configured for
+  Headplane itself. Rotation must create and verify a replacement, atomically
+  update the configured credential, then offer revocation of the prior key.
+- [ ] End an API-key-authenticated browser session immediately when its own key
+  is revoked.
 
-**Known Gap:** ~~Resolved in Phase 13c Known Gap Fix (2026-10-04)~~
+**SQLite migration tool requirements:**
 
-~~The user management UI is currently only accessible when logged in with local Headplane credentials. When accessing Headplane via API key authentication (without Headplane login), the `/admin/users` page shows only "Add user" (for creating Headscale user namespaces/machines), not "Add Headplane User" (for creating dashboard users).~~
+- [ ] Ship a Headplane command equivalent to
+  `headplane migrate-local-admin --config <headplane-config> --legacy-db <headscale-sqlite-db>`
+  for native, Docker, and Nix deployments.
+- [ ] Support `--dry-run` and `--username`; require `--username` if more than
+  one legacy `admin` row exists.
+- [ ] Read the legacy SQLite `headplane_users` table without modifying it.
+- [ ] Copy exactly one selected administrator's existing valid bcrypt hash into
+  `user.password`; passwords are never recoverable or rewritten as plaintext.
+- [ ] Do not migrate secondary accounts, roles, themes, profile names, or legacy
+  per-user API-key ciphertext. Operators must configure `headscale.api_key`
+  separately.
+- [ ] Create a timestamped, mode-`0600` Headplane-config backup; write and
+  `fsync` a same-directory temporary file; atomically rename it into place; and
+  preserve restrictive ownership and permissions.
+- [ ] Be idempotent: an already matching config is a successful no-op; a config
+  containing different local-admin credentials fails without overwriting it;
+  interrupted writes leave the original config valid; repeated runs never alter
+  the legacy database.
+- [ ] Provide host-level `hash-password --password-stdin` and
+  `reset-local-admin-password --password-stdin` commands for fresh setup and
+  lockout recovery without exposing plaintext passwords in process arguments.
 
-**Resolution:**
+**Rollback and operational safety:**
 
-As of 2026-10-04, the Known Gap has been resolved. Admin user management UI is now fully accessible via API key authentication:
+- [ ] Document a pre-migration backup of the Headplane config and the complete
+  Headscale SQLite set, including `-wal` and `-shm` files when present.
+- [ ] Document stopping Headplane before migration and using `--dry-run` before
+  the actual write.
+- [ ] If migration fails before the atomic rename, operators correct the reported
+  precondition and rerun; the config remains unchanged.
+- [ ] If migration has completed but must be abandoned, operators stop
+  Headplane, restore the timestamped config backup, redeploy the prior
+  Headplane/Headscale versions, clear the browser session cookie, and restart.
+- [ ] Do not add a destructive Headscale database migration or drop legacy
+  Headplane tables in this release. Any later cleanup requires a separately
+  announced migration after the rollback window.
 
-- [x] Enable admin user management UI for API key authenticated sessions
-- [x] Add "Add Headplane User" button/functionality to `/admin/users` when accessed via API key
-- [x] Allow admins to create, edit, and delete Headplane dashboard users from the UI regardless of authentication method
-- [x] Ensure proper authorization checks (admin-only access)
-- [x] Update documentation to reflect unified admin UI capabilities
+**Security and documentation requirements:**
 
-**What Changed:**
+- [ ] Document that config encryption is not a substitute for secret management:
+  the decryption key would still need to be available at startup.
+- [ ] Require `0600` configuration permissions, a trusted owner, and a parent
+  directory not writable by untrusted users; never commit config files to source
+  control.
+- [ ] Recommend `headscale.api_key_path` backed by systemd credentials, Docker
+  secrets, Kubernetes Secrets, or an equivalent managed secret file.
+- [ ] Document HTTPS, secure cookies, API-key rotation, recovery, migration,
+  rollback, and the one-local-admin limitation in Headscale and Headplane docs.
 
-- Admin API keys can now access all user management endpoints and UI features
-- The `/admin/users` page displays full user management interface for both password and API key sessions
-- Authorization checks properly validate admin privileges for both authentication methods
-- Comprehensive documentation added: API reference, user guides, and examples
+**Verification requirements:**
 
-**Reference:** 
-- API Reference: [`docs/ref/api/headplane-users.md`](./docs/ref/api/headplane-users.md)
-- Authentication Guide: [`docs/usage/authentication.md#admin-user-management-with-api-keys`](./docs/usage/authentication.md#admin-user-management-with-api-keys)
-- CHANGELOG: Phase 13c Known Gap Fix section
-
-**Follow-up Required:**
-
-None. The Known Gap is fully resolved.
+- [ ] Unit tests cover bcrypt config validation, local login, rate limiting,
+  password reset, session invalidation, disabled OIDC/proxy paths, API-key
+  lifecycle safeguards, and every migration success/failure/idempotency path.
+- [ ] Browser tests cover local login, API-key login, the single-admin notice,
+  password reset, API-key rotation/revocation, and the absence of local user
+  management controls.
+- [ ] Focused Headscale tests confirm legacy Headplane local-auth routes are no
+  longer mounted, API-key endpoints continue unchanged, and no destructive
+  database migration was introduced.
+- [ ] Run Headplane unit, typecheck, lint, E2E, and docs-build checks plus the
+  focused Headscale test and formatting/lint checks before release.
 
 ---
 
@@ -614,13 +686,16 @@ None. The Known Gap is fully resolved.
 
 The separation of concerns across all sub-phases:
 
-- **Headplane authentication** (13a, 13c): Local password validation, session
-  management. No interaction with Headscale API for login.
-- **Headscale API key** (13b, 13c): Stored in Headplane settings after login,
-  used by Headplane to make authenticated API calls to Headscale on behalf of the
-  user.
-- **User logs into Headplane** with Headplane password, then configures Headscale
-  API key in Settings so Headplane can interact with Headscale.
+- **Headplane local administrator** (Phase 13c): One bcrypt-backed username and
+  password configured in Headplane's own `config.yaml`; Headplane verifies the
+  password and owns its local browser session lifecycle.
+- **Headscale API key**: A distinct Headscale credential used for dashboard API
+  calls and available as the secondary Headplane login method. It is configured
+  through Headplane, preferably with `headscale.api_key_path` and managed by a
+  deployment secret mechanism.
+- **Legacy local-account data**: The prior Headscale `headplane_users` and
+  `headplane_settings` tables are migration input and rollback data only. They
+  are not the runtime source of authentication after Phase 13c.
 
 ## Phase 14 — Module Path Rewrite to `github.com/arsydoni4326-alt/headscale` [Planned]
 
