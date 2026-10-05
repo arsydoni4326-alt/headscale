@@ -1,145 +1,182 @@
 # Parallel Development Workflow with Git Worktrees
 
-Reusable workflow for executing parallel development tasks using Git Worktrees and multiple Cline agent instances.
+This document describes the reusable workflow for executing parallel development tasks using Git worktrees and isolated feature branches.
 
 ## Overview
 
-Execute multiple independent tasks simultaneously in isolated Git worktrees, each with its own feature branch.
+Execute multiple independent tasks simultaneously in isolated Git worktrees, each with its own feature branch, all originating from the same base commit.
 
-## When to Use
+## When to Use This Workflow
 
 **Use when:**
-- Phase contains multiple independent tasks
+- A phase contains multiple independent tasks
 - Minimal file overlap between tasks
 - Tasks can be validated independently
-- Up to 10 tasks can run safely
+- 1-10 tasks need to run in parallel
+- Each task can complete without waiting for others
 
 **Do NOT use when:**
-- Tasks modify the same core files
-- Sequential implementation required
-- Tightly coupled tasks
-- Database migrations (unless coordinated)
+- Tasks modify the same core files extensively
+- Sequential implementation is required for correctness
+- Tasks are tightly coupled or have complex dependencies
+- Database migrations require coordination
+- The merge strategy is not yet clear
 
-## Workflow
+## Prerequisites
 
-### 1. Planning (Required)
-- Read ROADMAP.md and documentation
-- Create implementation plan
-- Identify parallelizable tasks (max 10)
-- Document dependencies
-- **GET APPROVAL** before proceeding
+- Clean working tree (no uncommitted changes)
+- Explicit base ref or commit SHA identified
+- Task breakdown and dependency analysis complete
+- Approval to proceed with parallel implementation
+
+## Workflow Steps
+
+### 1. Planning Phase (Required)
+
+Before creating any worktrees:
+
+1. Read `ROADMAP.md`, `SPECIFICATION.md`, `ARCHITECTURE.md`, and relevant documentation
+2. Identify the current phase and break it into logical, independent tasks
+3. Analyze file overlap and dependencies between tasks
+4. Document each task's objective, scope, dependencies, testing requirements, and commit message format
+5. **GET EXPLICIT APPROVAL** before proceeding
 
 ### 2. Worktree Creation
 
+Use the provided script for safe, atomic worktree creation:
+
 ```bash
 # Verify clean state
-git status --porcelain
-git branch --show-current
-git rev-parse HEAD  # Record SHA
+git status --porcelain  # Must be empty
+BASE_REF="main"  # or 'dev', or a specific commit SHA
 
-# Create worktrees (one directory above project)
-cd /path/to/parent
-git -C project worktree add -b feature/task-name ../project-task-name base-branch
+# Record the base commit
+BASE_COMMIT=$(git rev-parse "$BASE_REF")
+echo "Base commit: $BASE_COMMIT"
 
-# Verify
+# Create worktrees (requires explicit base ref)
+./scripts/parallel-feature-worktrees.sh "$BASE_REF" task1 task2 task3
+
+# Verify creation
 git worktree list
 ```
 
-### 3. Agent Instructions
+The script guarantees:
+- All branches created from the exact same base commit
+- Non-interactive operation (no prompts)
+- Collision detection (fails if branch/path exists)
+- Atomic rollback on any error
 
-Create:
-- `AGENT_INSTRUCTIONS.md` - Overview and general rules
-- `AGENT_INSTRUCTIONS_TASK1.md` - Task-specific instructions
-- `INITIAL_PROMPT.md` - Initial prompts for each agent
+### 3. Task Assignment and Agent Instructions
 
-Each task instruction must include:
-- Objective, worktree path, branch
-- Scope (what to change and NOT change)
-- Step-by-step instructions
-- Validation checklist
+For each task, create clear instructions with:
+- Worktree path and branch name
+- Objective and scope (what to change and NOT change)
+- Step-by-step implementation guidance
+- Validation checklist (build, test, lint commands)
 - Exact commit message format
-- Dependencies
+- Dependencies on other tasks (if any)
+- Restrictions (files not to touch, worktrees not to access)
 
-### 4. Agent Execution
+### 4. Execution Rules
 
-**Sequential start if dependencies:**
-1. Primary agent completes first
-2. Reports commit SHA
-3. Dependent agents merge and start in parallel
+**For independent tasks:** Start all agents in parallel, each working only in its assigned worktree.
 
-**Isolation rules:**
+**For dependent tasks:**
+1. Primary/foundation task completes first
+2. Agent reports commit SHA and affected files
+3. Dependent agents merge the foundation commit
+4. Dependent agents proceed in parallel
+
+**Isolation rules (mandatory):**
 - Work only in assigned worktree
 - Never modify other worktrees
-- Never merge to main yourself
-- Stay within assigned scope
+- Never merge to main/dev yourself
+- Stay strictly within assigned scope
 
 ### 5. Integration Analysis
 
-After all agents complete:
+After all agents complete, analyze for conflicts:
+
 ```bash
-# Check for conflicts
+# Compare changed files between two branches
 git diff feature/task1..feature/task2 --name-only
 
-# Identify shared files
+# List files changed by each task
 git log feature/task1 --name-only --pretty=format: | sort -u > task1.txt
 git log feature/task2 --name-only --pretty=format: | sort -u > task2.txt
 comm -12 task1.txt task2.txt
 ```
 
-### 6. Validation
+### 6. Validation (Per-Branch)
 
-Per-branch:
+Each branch must pass validation independently:
+
 ```bash
-cd /worktree
-make build && make test
+cd /path/to/worktree
+make build
+make test
+make fmt
+make lint
+git diff --check
 ```
 
-### 7. Merge
+### 7. Merge Strategy
 
-Merge in dependency order:
+Merge in dependency order after approval:
+
 ```bash
+cd /original/repo/path
 git checkout main
-git merge --no-ff feature/task-name -m "Description"
+git merge --no-ff feature/task1 -m "Merge feature/task1: <description>"
 make clean && make build && make test
+git push origin main
 ```
 
-### 8. Cleanup
+### 8. Cleanup (Only After Approval)
 
-Only after approval:
 ```bash
 git worktree remove /path/to/worktree
 git branch -d feature/task-name  # Optional
 ```
 
-## Directory Structure
+## Script Reference
 
-```
-parent/
-├── project/           # Main worktree
-├── project-task1/     # Task 1 worktree
-├── project-task2/     # Task 2 worktree
-```
+### `scripts/parallel-feature-worktrees.sh`
 
-## Branch Naming
+Non-interactive script for safe worktree creation.
 
-```
-feature/<short-descriptive-name>
+**Usage:**
+```bash
+./scripts/parallel-feature-worktrees.sh <base-ref> <name1> [name2] ... [name10]
 ```
 
-## Common Issues
+**Requirements:**
+- Clean working tree
+- Explicit base ref (branch name or commit SHA)
+- 1-10 feature names
+- No existing branches/paths with those names
 
-**Merge conflicts:** Identify files, determine precedence, request guidance
-**Dependency not ready:** Wait, do not implement workaround
-**Scope creep:** Stop, document, ask for approval
-**Build failures:** Report exact error, do not patch
+**Safety guarantees:**
+- Atomic operation (all succeed or all rolled back)
+- Collision detection before any changes
+- All branches from exact same base commit
 
-## Phase 14 Example
+## Best Practices
 
-5 worktrees: core module rewrite (primary) + 4 parallel tasks (submodule, build, docs, nix).
-See `AGENT_INSTRUCTIONS*.md` for complete example.
+1. **Single base commit** — All worktrees from exactly the same commit
+2. **Maximum 10 parallel tasks** — More tasks increase merge complexity
+3. **Choose low-coupling tasks** — Avoid tasks that touch the same core code
+4. **Document everything** — Commands run, decisions made, assumptions
+5. **Test independently** — Each feature must work standalone
+6. **Commit frequently** — Small, focused commits
+7. **Never skip validation** — Build + test + lint before merge
+8. **Keep worktrees short-lived** — Merge and clean up promptly
 
-## References
+## See Also
 
-- `AGENTS.md` - Agent behavior
-- `ROADMAP.md` - Project roadmap
-- `git help worktree`
+- [Git Worktree Documentation](https://git-scm.com/docs/git-worktree)
+- [Project Guidelines](../CONTRIBUTING.md)
+- [Architecture Documentation](../ARCHITECTURE.md)
+- [Roadmap](../ROADMAP.md)
+- Detailed reference: `docs/parallel-development.md`
