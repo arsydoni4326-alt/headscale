@@ -1,8 +1,25 @@
 # Phase 13c: Single Local Administrator Migration Runbook
 
-**Status:** Planned operator procedure  
+**Status:** Complete — Implementation and migration finished  
+**Completed:** 2026-10-06  
 **Technical design:** [Single Local Administrator Migration Plan](./phase13c-single-admin-migration-plan.md)  
 **Authoritative scope:** [Phase 13c in the roadmap](../ROADMAP.md#phase-13c--single-local-administrator-migration-planned)
+
+## Completion Summary
+
+Phase 13c — Single Local Administrator Migration is **complete**. This runbook documents the migration procedure that has been implemented and verified. Operators can now use the delivered migration tooling and follow the procedures outlined below to migrate their deployments from the legacy multi-user system to the new single-admin configuration.
+
+**What was delivered:**
+- Migration command for converting legacy database users to config-based admin
+- Password hashing and reset commands
+- Comprehensive validation and idempotency checks
+- Rollback procedures and backup guidance
+- API key rotation and management UI
+- Full verification and testing coverage
+
+See the [CHANGELOG](../CHANGELOG.md) for implementation details.
+
+---
 
 ## What changes
 

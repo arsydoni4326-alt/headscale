@@ -1,8 +1,26 @@
 # Phase 13c: Single Local Administrator Migration Plan
 
-**Status:** Planned  
+**Status:** Complete  
+**Completed:** 2026-10-06  
 **Authoritative scope:** [Phase 13c in the roadmap](../ROADMAP.md#phase-13c--single-local-administrator-migration-planned)  
 **Companion operator procedure:** [Migration runbook](./phase13c-single-admin-migration-runbook.md)
+
+## Completion Summary
+
+Phase 13c — Single Local Administrator Migration is **complete**. Headplane now supports only a single local administrator account with password stored as a bcrypt hash in configuration. The Headscale database-backed multi-user local authentication system has been retired. All implementation, migration, testing, and documentation steps outlined in this plan have been completed successfully.
+
+**Key outcomes:**
+- Single local administrator configured via `config.yaml` with bcrypt password hash
+- Headplane owns local authentication; Headscale no longer manages Headplane users
+- Legacy `headplane_users` and `headplane_settings` tables preserved for rollback
+- API key authentication remains fully functional as a secondary method
+- OIDC and proxy authentication runtime paths disabled in single-admin mode
+- Migration tooling, password reset, and API key lifecycle UI implemented
+- Comprehensive testing and documentation delivered
+
+See the [CHANGELOG](../CHANGELOG.md) for detailed changes.
+
+---
 
 ## Purpose
 
