@@ -691,6 +691,193 @@ The separation of concerns across all sub-phases:
   `headplane_settings` tables are migration input and rollback data only. They
   are not the runtime source of authentication after Phase 13c.
 
+## Phase 15 — Database Version Migration v0.36.3 → v1.0.0 [In Progress]
+
+**Status:** In Progress  
+**Priority:** Critical (blocks v1.0.0 adoption)  
+**Impact:** Database version metadata update (no schema changes)
+
+### Problem Statement
+
+Headscale v1.0.0-arsydoni4326 cannot open databases created with v0.36.3-arsydoni4326-alt due to major version check (v0→v1), even though:
+
+- **No schema changes** between versions
+- **Phase 13c retirement** is code-only (runtime user creation removed)
+- **Legacy tables preserved** for rollback (`headplane_users`, `headplane_settings`)
+- **Database structure identical** between v0.36.3 and v1.0.0
+
+### Root Cause
+
+The `checkVersionUpgradePath()` function in `hscontrol/db/db.go` blocks major version jumps (v0→v1) without considering that this fork's v1.0.0 is feature-equivalent to v0.36.3 with Phase 13c code retirement.
+
+### Solution: Manual Version Migration
+
+Since no schema changes exist, the migration updates database version metadata only:
+
+#### Step 1: Backup Everything
+
+```bash
+# Stop Headscale
+docker compose down
+
+# Backup database files
+cp /var/lib/headscale/headscale.db /var/lib/headscale/headscale.db.v0.36.3.backup
+cp /var/lib/headscale/headscale.db-wal /var/lib/headscale/headscale.db-wal.backup 2>/dev/null || true
+cp /var/lib/headscale/headscale.db-shm /var/lib/headscale/headscale.db-shm.backup 2>/dev/null || true
+
+# Backup entire directory
+tar -czf /tmp/headscale-backup-$(date +%Y%m%d-%H%M%S).tar.gz /var/lib/headscale/
+```
+
+#### Step 2: Update Database Version Metadata
+
+Create migration script `/tmp/migrate-v0-to-v1.sql`:
+
+```sql
+-- Phase 15: Update database version metadata for v1.0.0 migration
+-- NO SCHEMA CHANGES - version metadata only
+
+BEGIN TRANSACTION;
+
+-- Update the last_seen_version if it exists
+UPDATE kv 
+SET value = '1.0.0-arsydoni4326' 
+WHERE key = 'last_seen_version';
+
+-- If no version record exists, insert it
+INSERT OR IGNORE INTO kv (key, value) 
+VALUES ('last_seen_version', '1.0.0-arsydoni4326');
+
+-- Verify the migration
+SELECT key, value FROM kv WHERE key = 'last_seen_version';
+
+COMMIT;
+```
+
+Apply the migration:
+
+```bash
+# Apply SQL migration
+sqlite3 /var/lib/headscale/headscale.db < /tmp/migrate-v0-to-v1.sql
+
+# Verify version updated
+sqlite3 /var/lib/headscale/headscale.db "SELECT key, value FROM kv WHERE key = 'last_seen_version';"
+```
+
+#### Step 3: Verify Phase 13c Configuration
+
+Ensure Headplane is configured for Phase 13c (single local admin):
+
+```yaml
+# /etc/headplane/config.yaml or equivalent
+user:
+  username: admin
+  password: "$2b$12$..."  # bcrypt hash, NOT plaintext
+
+headscale:
+  url: "http://headscale:8080"
+  api_key: "your-admin-api-key"  # or api_key_path
+```
+
+If not configured, run Headplane migration:
+
+```bash
+headplane migrate-local-admin \
+  --config /etc/headplane/config.yaml \
+  --legacy-db /var/lib/headscale/headscale.db \
+  --dry-run
+
+# After reviewing, run actual migration
+headplane migrate-local-admin \
+  --config /etc/headplane/config.yaml \
+  --legacy-db /var/lib/headscale/headscale.db
+```
+
+#### Step 4: Start v1.0.0
+
+```bash
+# Switch to v1.0.0
+cd /home/denny/Project/headscale-project/headscale
+git checkout v1.0.0-arsydoni4326
+
+# Rebuild
+make clean
+make build
+
+# Or for Docker
+docker compose build --no-cache
+
+# Start services
+docker compose up -d
+
+# Verify version
+docker compose exec headscale headscale version
+# Should show: v1.0.0-arsydoni4326
+
+# Check logs for successful startup
+docker compose logs headscale | head -50
+```
+
+### Rollback Procedure
+
+If v1.0.0 fails:
+
+```bash
+# Stop services
+docker compose down
+
+# Restore backup
+cp /var/lib/headscale/headscale.db.v0.36.3.backup /var/lib/headscale/headscale.db
+
+# Revert to v0.36.3
+git checkout v0.36.3-arsydoni4326-alt
+make build
+# Or: docker compose build --no-cache
+
+# Restart
+docker compose up -d
+```
+
+### What v1.0.0 Changes (Code Only)
+
+- ✅ **Removed:** Automatic default admin user creation from `cfg.Headplane.Password`
+- ✅ **Removed:** Tests for database-backed Headplane user creation
+- ✅ **Preserved:** Legacy `headplane_users` and `headplane_settings` tables
+- ✅ **Preserved:** All Headscale core functionality (nodes, users, routes, policies)
+- ✅ **Required:** Headplane must use Phase 13c config-based authentication
+
+### Verification Checklist
+
+After migration to v1.0.0:
+
+- [ ] Headscale starts without "version check" error
+- [ ] `headscale version` reports v1.0.0-arsydoni4326
+- [ ] `headscale nodes list` shows all existing nodes
+- [ ] `headscale users list` shows all existing users
+- [ ] `headscale routes list` shows all existing routes
+- [ ] Headplane login works (config-based authentication)
+- [ ] Headplane `/admin` page accessible
+- [ ] API keys work for Headscale API access
+- [ ] No data loss compared to v0.36.3 backup
+
+### Future Permanent Fix (Phase 15b)
+
+Update `hscontrol/db/db.go` to allow v0.36.3 → v1.0.0 migration:
+
+```go
+// In checkVersionUpgradePath()
+// Allow fork's v0.36.3-arsydoni4326-alt → v1.0.0-arsydoni4326 migration
+// This is safe because v1.0.0 has no schema changes from v0.36.3
+if lastVersion == "0.36.3-arsydoni4326-alt" && 
+   currentVersion == "1.0.0-arsydoni4326" {
+    return nil  // Allow this specific migration
+}
+```
+
+This permanent fix will be included in v1.0.1-arsydoni4326.
+
+---
+
 ## Phase 14 — Module Path Rewrite to `github.com/arsydoni4326-alt/headscale` [Planned]
 
 **Status:** Planned  
