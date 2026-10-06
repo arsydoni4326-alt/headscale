@@ -676,6 +676,60 @@ See the [CHANGELOG](./CHANGELOG.md) for detailed implementation changes.
 
 ---
 
+### Phase 13d — Restore `/admin/admin/users` Editable User Profile UI [Planned]
+
+**Status:** Planned
+
+**Objective:** Restore the `/admin/admin/users` route in Headplane with a full editable user profile UI that allows the local administrator to update their username, password, name, and avatar. All changes must persist to Headplane's `config.yaml`.
+
+**Problem addressed:**
+
+During the Phase 13c implementation, the `/admin/admin/users` route was accidentally removed. This route should provide a dedicated editable user profile interface for the single local administrator.
+
+**Requirements:**
+
+- [ ] Restore `/admin/admin/users` route in Headplane.
+- [ ] Provide an editable UI with the following fields:
+  - [ ] Username (editable text field)
+  - [ ] Password (secure password input with current password verification)
+  - [ ] Name/Display Name (editable text field)
+  - [ ] Avatar Picture (optional file upload or URL input)
+  - [ ] Save button to persist all changes
+- [ ] All submitted field updates must persist to the corresponding values in Headplane's `config.yaml`:
+  - `user.username`
+  - `user.password` (stored as bcrypt hash)
+  - `user.name`
+  - `user.avatar` (if implemented)
+- [ ] **Graceful handling of missing configuration fields:**
+  - If any user fields are absent or undefined in `config.yaml`, the UI must display placeholder values and allow editing.
+  - The UI must not raise errors or fail to load when fields are missing.
+  - Empty or missing fields should render as empty input fields with appropriate placeholders (e.g., "Enter username", "No name set").
+- [ ] Form validation and error handling:
+  - Username uniqueness validation (if applicable)
+  - Password strength requirements
+  - Current password verification before allowing password changes
+  - File size/type validation for avatar uploads
+- [ ] Visual feedback for successful save operations and error states.
+- [ ] Atomic configuration updates with backup creation (following Phase 13c's config update pattern).
+
+**Technical work:**
+
+- Backend: Extend or create Headplane configuration update endpoints that support username, name, and avatar field updates alongside existing password change functionality.
+- Frontend: Implement `/admin/admin/users` route with a comprehensive user profile edit form.
+- Configuration: Ensure `config.yaml` schema supports optional `user.name` and `user.avatar` fields.
+- Testing: Unit and integration tests covering all field update scenarios, including missing field handling.
+
+**Expected outcome:**
+
+1. The local administrator can navigate to `/admin/admin/users` and edit their profile information.
+2. All changes persist to `config.yaml` securely and atomically.
+3. The UI gracefully handles partial or missing configuration without errors.
+4. Improved user experience for managing local administrator account details.
+
+**Priority:** Medium
+
+---
+
 ## Phase 13 Architecture Note
 
 The separation of concerns across all sub-phases:
