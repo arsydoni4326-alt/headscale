@@ -1188,22 +1188,10 @@ func ensureHeadplaneUsersTable(tx *gorm.DB, cfg *types.Config) error {
 			return err
 		}
 
-		if !usersTableMissing || cfg.Headplane.Password == "" {
-			return nil
-		}
-
-		var count int64
-		if err := tx.Model(&HeadplaneUser{}).Count(&count).Error; err != nil {
-			return fmt.Errorf("counting headplane users: %w", err)
-		}
-
-		if count == 0 {
-			_, err := CreateHeadplaneUser(tx, "admin", cfg.Headplane.Password, "admin")
-			if err != nil {
-				return fmt.Errorf("creating default admin user: %w", err)
-			}
-			log.Info().Msg("Created default admin user from config password")
-		}
+		// Phase 13c: No longer create default admin user from config password.
+		// Legacy tables are preserved for rollback, but runtime user creation
+		// and password authentication are retired.
+		_ = usersTableMissing
 
 		return nil
 	})
