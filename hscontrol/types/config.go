@@ -105,11 +105,13 @@ type NodeConfig struct {
 	Routes RouteConfig
 }
 
-// HeadplaneConfig contains Headplane-specific configuration.
+// HeadplaneConfig contains deprecated Headplane-specific configuration.
+// Phase 13c: This config is preserved during the rollback window but no longer
+// used by Headscale. Headplane local-auth runtime has been retired.
 type HeadplaneConfig struct {
-	// Password is the password for Headplane web UI authentication.
-	// Can be overridden by HEADSCALE_HEADPLANE_PASSWORD environment variable.
-	Password string `json:"-"` // never serialise the Headplane password
+	// Password is deprecated and no longer used.
+	// Preserved for rollback compatibility only.
+	Password string `json:"-"`
 }
 
 // Config contains the initial Headscale configuration.

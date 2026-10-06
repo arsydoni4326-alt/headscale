@@ -1,102 +1,193 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Parallel Feature Worktrees Setup Script
 # Creates Git worktrees for parallel feature development
+#
+# Usage: ./scripts/parallel-feature-worktrees.sh <base-ref> <name1> [name2] ... [name10]
+#
+# Requirements:
+# - Clean working tree (no uncommitted changes)
+# - Explicit base ref or SHA (branch name or commit hash)
+# - 1-10 feature names
+# - No existing branches or paths with the same names
+#
+# Safety guarantees:
+# - Non-interactive (no prompts)
+# - All branches created from the exact same base commit
+# - Collision detection prevents accidental overwrites
+# - Atomic operation: either all succeed or none are created
 
-set -e
+set -euo pipefail
 
 # Configuration
 REPO_DIR="$(pwd)"
 PARENT_DIR="$(dirname "$REPO_DIR")"
 REPO_NAME="$(basename "$REPO_DIR")"
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
-
 # Usage
 usage() {
-    echo "Usage: $0 <feature1> <feature2> [feature3] [feature4] [feature5]"
-    echo ""
-    echo "Example:"
-    echo "  $0 plugin-system multi-instance-dashboard monitoring-integrations"
-    echo ""
-    echo "This will create:"
-    echo "  - Feature branches: feature/plugin-system, feature/multi-instance-dashboard, ..."
-    echo "  - Worktrees: ../${REPO_NAME}-plugin-system, ../${REPO_NAME}-multi-instance-dashboard, ..."
+    cat <<EOF
+Usage: $0 <base-ref> <name1> [name2] ... [name10]
+
+Creates Git worktrees for parallel feature development.
+
+Arguments:
+  base-ref    Base branch or commit SHA (e.g., 'main', 'dev', or a commit hash)
+  name1-10    Feature names (1-10 names; will create feature/<name> branches)
+
+Example:
+  $0 main plugin-system multi-instance monitoring
+
+This creates:
+  - Branches: feature/plugin-system, feature/multi-instance, feature/monitoring
+  - Worktrees: ../${REPO_NAME}-plugin-system, ../${REPO_NAME}-multi-instance, ../${REPO_NAME}-monitoring
+  - All from the exact commit at 'main'
+
+Requirements:
+  - Clean working tree (no uncommitted changes)
+  - No existing branches or paths with the same names
+  - Base ref must resolve to a valid commit
+
+Safety:
+  - Non-interactive (no prompts)
+  - All branches created from the exact same base commit
+  - Collision detection prevents overwrites
+  - Fails atomically if any step cannot complete
+
+See docs/parallel-development-workflow.md for the full workflow.
+EOF
     exit 1
 }
 
 # Check arguments
-if [ $# -lt 2 ] || [ $# -gt 5 ]; then
-    echo -e "${RED}Error: Provide 2-5 feature names${NC}"
+if [ $# -lt 2 ]; then
+    echo "Error: At least a base ref and one feature name are required." >&2
+    echo "" >&2
     usage
 fi
 
+if [ $# -gt 11 ]; then
+    echo "Error: Maximum 10 feature names allowed (got $(($# - 1)))." >&2
+    echo "" >&2
+    usage
+fi
+
+BASE_REF="$1"
+shift
+FEATURE_NAMES=("$@")
+
 # Verify we're in a git repository
 if [ ! -d .git ]; then
-    echo -e "${RED}Error: Not in a git repository root${NC}"
+    echo "Error: Not in a git repository root. Run this script from the repository root." >&2
     exit 1
 fi
 
 # Check for uncommitted changes
 if ! git diff-index --quiet HEAD --; then
-    echo -e "${RED}Error: You have uncommitted changes. Commit or stash them first.${NC}"
-    git status --short
+    echo "Error: Working tree has uncommitted changes. Commit or stash them first." >&2
+    git status --short >&2
     exit 1
 fi
 
-# Record base commit
-BASE_COMMIT=$(git rev-parse HEAD)
-CURRENT_BRANCH=$(git branch --show-current)
+# Resolve base ref to commit SHA
+if ! BASE_COMMIT=$(git rev-parse --verify "$BASE_REF^{commit}" 2>/dev/null); then
+    echo "Error: Base ref '$BASE_REF' does not resolve to a valid commit." >&2
+    exit 1
+fi
 
-echo -e "${GREEN}Base commit: $BASE_COMMIT${NC}"
-echo -e "${GREEN}Current branch: $CURRENT_BRANCH${NC}"
+echo "Base ref: $BASE_REF"
+echo "Base commit: $BASE_COMMIT"
+echo "Repository: $REPO_NAME"
+echo "Features: ${FEATURE_NAMES[*]}"
 echo ""
 
-# Create branches and worktrees
-for feature in "$@"; do
-    BRANCH_NAME="feature/$feature"
-    WORKTREE_PATH="${PARENT_DIR}/${REPO_NAME}-${feature}"
-    
-    echo -e "${YELLOW}Creating feature: $feature${NC}"
-    
-    # Check if branch already exists
+# Pre-flight collision check
+COLLISION_DETECTED=0
+for name in "${FEATURE_NAMES[@]}"; do
+    BRANCH_NAME="feature/$name"
+    WORKTREE_PATH="${PARENT_DIR}/${REPO_NAME}-${name}"
+
     if git show-ref --verify --quiet "refs/heads/$BRANCH_NAME"; then
-        echo -e "${RED}  Branch $BRANCH_NAME already exists. Skipping.${NC}"
-        continue
+        echo "Error: Branch '$BRANCH_NAME' already exists." >&2
+        COLLISION_DETECTED=1
     fi
-    
-    # Check if worktree path already exists
-    if [ -d "$WORKTREE_PATH" ]; then
-        echo -e "${RED}  Directory $WORKTREE_PATH already exists. Skipping.${NC}"
-        continue
+
+    if [ -e "$WORKTREE_PATH" ]; then
+        echo "Error: Path '$WORKTREE_PATH' already exists." >&2
+        COLLISION_DETECTED=1
     fi
-    
-    # Create branch
-    git branch "$BRANCH_NAME"
-    echo -e "${GREEN}  ✓ Created branch: $BRANCH_NAME${NC}"
-    
+done
+
+if [ $COLLISION_DETECTED -eq 1 ]; then
+    echo "" >&2
+    echo "Collision detected. No branches or worktrees were created." >&2
+    exit 1
+fi
+
+# Record branches and worktrees created for potential cleanup
+CREATED_BRANCHES=()
+CREATED_WORKTREES=()
+
+# Cleanup function for error handling
+cleanup_on_error() {
+    echo "" >&2
+    echo "Error occurred. Rolling back partially created branches and worktrees..." >&2
+
+    for worktree in "${CREATED_WORKTREES[@]}"; do
+        if [ -n "$worktree" ]; then
+            git worktree remove "$worktree" --force 2>/dev/null || true
+            echo "  Removed worktree: $worktree" >&2
+        fi
+    done
+
+    for branch in "${CREATED_BRANCHES[@]}"; do
+        if [ -n "$branch" ]; then
+            git branch -D "$branch" 2>/dev/null || true
+            echo "  Removed branch: $branch" >&2
+        fi
+    done
+
+    echo "Rollback complete. No changes were made to the repository." >&2
+    exit 1
+}
+
+trap cleanup_on_error ERR
+
+# Create branches and worktrees
+echo "Creating branches and worktrees from $BASE_COMMIT..."
+echo ""
+
+for name in "${FEATURE_NAMES[@]}"; do
+    BRANCH_NAME="feature/$name"
+    WORKTREE_PATH="${PARENT_DIR}/${REPO_NAME}-${name}"
+
+    echo "Creating: $name"
+
+    # Create branch from base commit
+    git branch "$BRANCH_NAME" "$BASE_COMMIT"
+    CREATED_BRANCHES+=("$BRANCH_NAME")
+    echo "  ✓ Branch: $BRANCH_NAME"
+
     # Create worktree
-    git worktree add "$WORKTREE_PATH" "$BRANCH_NAME" > /dev/null 2>&1
-    echo -e "${GREEN}  ✓ Created worktree: $WORKTREE_PATH${NC}"
+    git worktree add "$WORKTREE_PATH" "$BRANCH_NAME" >/dev/null 2>&1
+    CREATED_WORKTREES+=("$WORKTREE_PATH")
+    echo "  ✓ Worktree: $WORKTREE_PATH"
     echo ""
 done
 
 # Summary
-echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}Worktree setup complete!${NC}"
-echo -e "${GREEN}========================================${NC}"
+echo "========================================"
+echo "Worktree setup complete!"
+echo "========================================"
 echo ""
-echo "Worktrees created:"
+echo "All branches created from: $BASE_COMMIT"
+echo ""
 git worktree list
 echo ""
-echo -e "${YELLOW}Next steps:${NC}"
-echo "1. Navigate to each worktree: cd $PARENT_DIR/${REPO_NAME}-<feature>"
-echo "2. Implement the feature"
-echo "3. Test independently"
-echo "4. Commit and push"
-echo "5. Request merge approval"
+echo "Next steps:"
+echo "1. Navigate to each worktree: cd $PARENT_DIR/${REPO_NAME}-<name>"
+echo "2. Implement the feature in isolation"
+echo "3. Test independently: make build && make test"
+echo "4. Commit changes: git add -A && git commit"
+echo "5. Request merge approval (do not merge yourself)"
 echo ""
-echo "See docs/parallel-development.md for detailed workflow."
+echo "See docs/parallel-development-workflow.md for the complete workflow."
