@@ -1093,6 +1093,345 @@ If critical issues arise:
 
 ---
 
+## Phase 16 — Headplane UI/UX Improvements and Security Hardening [Planned]
+
+**Status:** Planned  
+**Priority:** High  
+**Impact:** User experience improvements and security hardening for Headplane admin interface
+
+### Objective
+
+Address critical UX inconsistencies and security issues in the Headplane web UI, including navigation fixes, avatar display, secure API key retrieval, and layout improvements.
+
+### Issues to Address
+
+#### Issue 1: Admin Menu Navigation Path
+
+**Problem:**  
+The Admin menu item in the main navigation bar incorrectly routes to `/admin/admin/users` instead of `/admin/admin`. This causes confusion and breaks the expected navigation hierarchy.
+
+**Current behavior:**
+```html
+<a href="/admin/admin/users">
+  <svg>...</svg>Admin
+</a>
+```
+
+**Expected behavior:**
+```html
+<a href="/admin/admin">
+  <svg>...</svg>Admin
+</a>
+```
+
+**Implementation:**
+- [ ] Locate the navigation component in `headplane/app/` (likely in a layout or navigation component)
+- [ ] Update the `href` attribute from `/admin/admin/users` to `/admin/admin`
+- [ ] Verify the Admin page (`/admin/admin`) has proper sub-navigation or default view
+- [ ] Test navigation flow: clicking Admin should land on the Admin overview page
+- [ ] Ensure backward compatibility if any bookmarks or external links reference the old path
+
+**Files likely affected:**
+- `headplane/app/components/navigation/*.tsx` or similar layout components
+- `headplane/app/routes/admin/layout.tsx` or routing configuration
+
+#### Issue 2: User Avatar Display
+
+**Problem:**  
+The user menu button displays a generic SVG icon instead of the user's avatar picture. The avatar URL should be retrieved from `config.yaml` and displayed when available.
+
+**Current behavior:**
+```html
+<button>
+  <svg class="lucide-circle-user">...</svg>
+</button>
+```
+
+**Expected behavior:**
+```html
+<button>
+  <img src="{avatar_url_from_config}" alt="User avatar" />
+  <!-- Fallback to SVG if avatar not configured -->
+</button>
+```
+
+**Implementation:**
+- [ ] Identify where `config.yaml` is loaded and parsed in the Headplane backend
+- [ ] Add avatar URL field to the config schema if not present:
+  ```typescript
+  // In config-schema.ts or equivalent
+  user?: {
+    username: string;
+    password: string;
+    avatar?: string; // URL or path to avatar image
+  }
+  ```
+- [ ] Expose the avatar URL via an API endpoint or include it in the authentication response
+- [ ] Update the user menu component to:
+  - [ ] Fetch/receive the avatar URL from config
+  - [ ] Render `<img>` element when avatar is available
+  - [ ] Fall back to the current SVG icon when avatar is not configured
+  - [ ] Handle image load errors gracefully (fallback to SVG)
+  - [ ] Apply appropriate CSS classes for circular avatar styling
+- [ ] Ensure proper caching and performance (avoid re-fetching on every render)
+- [ ] Add accessibility attributes: `alt` text, proper ARIA labels
+
+**Files likely affected:**
+- `headplane/app/server/config/config-schema.ts` (config schema)
+- `headplane/app/components/user-menu/*.tsx` (user menu component)
+- `headplane/app/server/auth/*.ts` (if avatar is included in auth response)
+- `headplane/config.example.yaml` (documentation)
+
+**Testing:**
+- [ ] With avatar URL in config: displays image
+- [ ] Without avatar URL in config: displays SVG fallback
+- [ ] With invalid avatar URL: displays SVG fallback
+- [ ] With slow-loading image: shows loading state or immediate fallback
+
+#### Issue 3: Secure API Keys Retrieval (Critical Security Fix)
+
+**Problem:**  
+In the `/admin/admin` page, the browser attempts to retrieve API keys directly from the `headscale` service. This exposes internal service endpoints to the client and violates the principle of backend-for-frontend (BFF) architecture. All headscale communication should be proxied through the headplane backend.
+
+**Current (insecure) flow:**
+```
+Browser → headscale:8080/api/v1/apikeys (direct)
+```
+
+**Expected (secure) flow:**
+```
+Browser → headplane:3000/api/admin/apikeys → headscale:8080/api/v1/apikeys
+```
+
+**Security implications:**
+- Exposes internal headscale API endpoints to clients
+- May bypass headplane authentication/authorization checks
+- Reveals internal network topology
+- Potential CORS issues and security policy violations
+
+**Implementation:**
+
+**Backend changes (Headplane):**
+- [ ] Create a new API endpoint in headplane for API key management:
+  ```typescript
+  // In headplane/app/server/api/admin/apikeys.ts or similar
+  export async function getApiKeys() {
+    // Internal authenticated call to headscale
+    const response = await headscaleClient.get('/api/v1/apikeys');
+    return response.data;
+  }
+  
+  export async function createApiKey(data: ApiKeyRequest) {
+    const response = await headscaleClient.post('/api/v1/apikeys', data);
+    return response.data;
+  }
+  
+  export async function deleteApiKey(keyId: string) {
+    const response = await headscaleClient.delete(`/api/v1/apikeys/${keyId}`);
+    return response.data;
+  }
+  ```
+- [ ] Ensure proper authentication: verify the requesting user is an admin
+- [ ] Add rate limiting to prevent abuse
+- [ ] Log all API key operations for audit trail
+
+**Backend changes (Headscale - if needed):**
+- [ ] Review existing API key endpoints in `hscontrol/api/v1/apikey.go` (or similar)
+- [ ] Ensure endpoints support service-to-service authentication from headplane
+- [ ] Consider adding an internal-only flag or separate endpoint for headplane access
+- [ ] Update CORS configuration to restrict direct browser access if needed
+
+**Frontend changes (Headplane):**
+- [ ] Update the API keys section in `/admin/admin` to call headplane endpoints:
+  ```typescript
+  // Replace direct headscale calls with headplane proxy calls
+  // Before:
+  // fetch('http://headscale:8080/api/v1/apikeys')
+  
+  // After:
+  // fetch('/api/admin/apikeys') // routed through headplane backend
+  ```
+- [ ] Update all API key CRUD operations (create, read, delete)
+- [ ] Ensure error handling and loading states remain functional
+- [ ] Update API client configuration to use headplane routes
+
+**Files likely affected:**
+- `headplane/app/server/api/admin/*.ts` (new proxy endpoints)
+- `headplane/app/routes/admin/admin/page.tsx` (or wherever API keys UI lives)
+- `headplane/app/lib/api-client.ts` (API client configuration)
+- `hscontrol/api/v1/apikey.go` (potential backend changes)
+- `hscontrol/grpcv1.go` or relevant API handler files
+
+**Testing:**
+- [ ] Verify browser never makes direct requests to headscale:8080
+- [ ] Check browser network tab: all requests go to headplane:3000
+- [ ] Test API key creation through the proxy
+- [ ] Test API key deletion through the proxy
+- [ ] Test API key listing through the proxy
+- [ ] Verify proper authentication/authorization on headplane endpoints
+- [ ] Test error scenarios: headscale down, network timeout, invalid permissions
+
+#### Issue 4: Full-Width Cards in `/admin/admin`
+
+**Problem:**  
+Cards in the `/admin/admin` page do not use the full width of their container, creating inconsistent spacing and suboptimal use of screen real estate.
+
+**Current behavior:**  
+Cards have constrained width with excessive margins/padding
+
+**Expected behavior:**  
+Cards span the full width of the content container, with appropriate responsive behavior
+
+**Implementation:**
+- [ ] Locate the card components in `/admin/admin` page
+- [ ] Update card container classes to use `w-full` or equivalent
+- [ ] Remove any fixed-width or max-width constraints on cards
+- [ ] Ensure responsive behavior on different screen sizes:
+  - [ ] Mobile: cards stack vertically, full width
+  - [ ] Tablet: cards may use 2-column grid if appropriate
+  - [ ] Desktop: full-width cards or appropriate grid layout
+- [ ] Maintain consistent internal padding within cards
+- [ ] Preserve visual hierarchy and readability at larger widths
+
+**Example fix (Tailwind CSS):**
+```tsx
+// Before:
+<div className="max-w-2xl mx-auto">
+  <Card>...</Card>
+</div>
+
+// After:
+<div className="w-full">
+  <Card className="w-full">...</Card>
+</div>
+```
+
+**Files likely affected:**
+- `headplane/app/routes/admin/admin/page.tsx` (or similar)
+- `headplane/app/components/cards/*.tsx` (if using reusable card components)
+- Tailwind configuration or CSS files
+
+**Testing:**
+- [ ] Verify cards are full-width on desktop (1920px, 1440px, 1280px)
+- [ ] Test responsive behavior on tablet (768px, 1024px)
+- [ ] Test responsive behavior on mobile (375px, 428px)
+- [ ] Ensure no horizontal scrolling issues
+- [ ] Verify visual consistency across all cards
+
+---
+
+### Implementation Order
+
+1. **Issue 1** (Admin navigation) — Quick win, low risk
+2. **Issue 4** (Full-width cards) — Quick win, low risk  
+3. **Issue 2** (Avatar display) — Medium complexity, requires config changes
+4. **Issue 3** (API keys proxy) — High complexity, security-critical, requires backend changes
+
+### Dependencies
+
+- **Blocks**: None
+- **Blocked by**: None (can proceed immediately)
+- **Related**: 
+  - Phase 13c (config-based authentication) — avatar config extends this
+  - Phase 12 (Headplane admin UI) — these improvements enhance that interface
+  - Security best practices — API key proxying aligns with BFF architecture
+
+### Success Criteria
+
+1. ✅ Admin menu navigates to `/admin/admin` (not `/admin/admin/users`)
+2. ✅ User avatar displays from `config.yaml` when configured
+3. ✅ User avatar falls back to SVG icon when not configured
+4. ✅ Browser never makes direct requests to headscale API for API keys
+5. ✅ All API key operations work through headplane proxy
+6. ✅ All cards in `/admin/admin` are full-width
+7. ✅ Responsive layout works correctly on all screen sizes
+8. ✅ No console errors or warnings
+9. ✅ All existing functionality remains intact
+10. ✅ Security audit passes: no direct backend exposure
+
+### Testing Checklist
+
+**Navigation (Issue 1):**
+- [ ] Click Admin menu item → lands on `/admin/admin`
+- [ ] Bookmark test: `/admin/admin/users` redirects or displays appropriate content
+- [ ] Navigation breadcrumb reflects correct hierarchy
+
+**Avatar (Issue 2):**
+- [ ] Config with avatar URL → displays image
+- [ ] Config without avatar URL → displays SVG fallback
+- [ ] Invalid image URL → displays SVG fallback
+- [ ] Image load error → displays SVG fallback
+- [ ] Avatar has proper alt text and accessibility
+
+**API Keys (Issue 3):**
+- [ ] Open browser DevTools Network tab
+- [ ] Navigate to `/admin/admin`
+- [ ] Verify all API requests go to `headplane:3000/*`, not `headscale:8080/*`
+- [ ] Create API key → works through proxy
+- [ ] Delete API key → works through proxy
+- [ ] List API keys → works through proxy
+- [ ] Unauthorized user → blocked by headplane auth
+- [ ] Headscale unavailable → graceful error handling
+
+**Full-Width Cards (Issue 4):**
+- [ ] Desktop 1920px: cards are full-width
+- [ ] Desktop 1440px: cards are full-width
+- [ ] Desktop 1280px: cards are full-width
+- [ ] Tablet 1024px: cards respond appropriately
+- [ ] Tablet 768px: cards respond appropriately
+- [ ] Mobile 428px: cards stack vertically, full-width
+- [ ] Mobile 375px: cards stack vertically, full-width
+- [ ] No horizontal scrolling on any screen size
+
+### Documentation Updates
+
+- [ ] Update `headplane/docs/CONFIGURATION.md` with avatar field documentation
+- [ ] Update `headplane/config.example.yaml` with avatar example
+- [ ] Update `headplane/docs/ARCHITECTURE.md` with BFF proxy pattern documentation
+- [ ] Add security note about API key proxy in `headplane/docs/SECURITY.md` (if exists)
+- [ ] Update `CHANGELOG.md` with security fix note for Issue 3
+- [ ] Update user-facing documentation with avatar setup instructions
+
+### Risk Assessment
+
+- **Issue 1**: Low risk — simple navigation fix
+- **Issue 2**: Low risk — additive feature with fallback
+- **Issue 3**: **High priority** — security improvement, requires coordination between headplane and headscale
+- **Issue 4**: Low risk — CSS/layout changes only
+
+### Estimated Effort
+
+- Issue 1 (Navigation): 30 minutes - 1 hour
+- Issue 2 (Avatar): 2-3 hours
+- Issue 3 (API key proxy): 4-6 hours (includes backend changes and testing)
+- Issue 4 (Full-width cards): 1-2 hours
+
+**Total estimated effort**: 8-12 hours
+
+### Release Notes
+
+**Version: v0.9.0-arsydoni4326-alt (Headplane)**
+
+**Improvements:**
+- Fixed Admin menu navigation to route to `/admin/admin` instead of `/admin/admin/users`
+- Added user avatar display support from `config.yaml` with fallback to icon
+- Improved layout consistency with full-width cards in Admin dashboard
+- **SECURITY**: API keys are now retrieved through Headplane proxy instead of direct browser-to-Headscale requests
+
+**Breaking Changes:**
+- None (all changes are backward compatible)
+
+**Migration Notes:**
+- To display a custom avatar, add `user.avatar` field to your Headplane `config.yaml`:
+  ```yaml
+  user:
+    username: admin
+    password: <bcrypt-hash>
+    avatar: https://example.com/avatar.jpg  # Optional
+  ```
+
+---
+
 ## Tracking
 
 - Day-to-day work is tracked via GitHub issues on the fork repositories.
