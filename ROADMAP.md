@@ -1445,7 +1445,34 @@ Cards span the full width of the content container, with appropriate responsive 
 Add a QR code-based registration flow to improve the onboarding experience for
 new nodes. This feature will allow users to register a node by either running
 the CLI command (as today) or by scanning a QR code with Headplane's web UI,
-which will automatically approve the device after a successful scan.
+without requiring OpenID Connect (OIDC).
+
+### Non-OIDC interactive registration requirement
+
+The QR flow must work when Headscale uses its standard CLI-approved interactive
+registration mode and no OIDC issuer is configured:
+
+1. A node begins interactive registration and is redirected to the public
+   Headscale registration page, for example:
+
+   ```text
+   https://<headscale-ui>/register/hskey-authreq-1dc74915f5a96f80xxxxxxxx
+   ```
+
+2. The `/register/{auth_id}` page keeps the existing
+   `headscale auth register --auth-id <auth_id> --user USERNAME` command and
+   displays a QR code for that same pending registration.
+3. An authenticated Headplane administrator opens **Machines → Scan QR**,
+   selects the target Headscale user, starts the camera scanner, and scans the
+   code.
+4. Headplane completes registration through Headscale's existing registration
+   API. Headscale remains authoritative for the pending auth ID, expiry, and
+   single-use consumption.
+
+The QR payload is an alternate transport for the existing pending registration
+authorization. It must not contain API keys, passwords, or other credentials,
+and it must not allow a registration to complete after the pending auth ID has
+expired or been consumed.
 
 ### Motivation
 
@@ -1457,7 +1484,7 @@ which will automatically approve the device after a successful scan.
 - Improves accessibility for users who cannot easily copy-paste CLI commands
   between devices.
 
-### Current Behavior
+### CLI-only behavior before Phase 17
 
 When a user registers a new node, Headscale returns a URL to the node
 registration page that displays:
@@ -1469,7 +1496,7 @@ Run the command below in the headscale server to add this node to your network:
 headscale auth register --auth-id <hskey> --user USERNAME
 ```
 
-### Proposed Behavior
+### Implemented behavior
 
 The registration page will display both the CLI command and a QR code option:
 
@@ -1485,16 +1512,20 @@ Go to Machines → Scan QR → Choose User → Start Scanning
 [QR CODE IMAGE]
 ```
 
-In Headplane, the QR code scanner is located in:
+This behavior applies to both standard non-OIDC interactive registration and
+OIDC registration. In Headplane, the QR code scanner is located in:
 **Machines → Scan QR → Choose User → Start Scanning**
 
-After a successful scan, the device will be automatically approved.
+After scanning, the administrator submits registration for the selected user;
+Headscale then approves the device if the pending registration is still valid.
 
 ### Scope
 
 #### Backend (Headscale)
 
 - [x] **Registration page enhancement**:
+  - [x] Render the QR code from the standard non-OIDC `/register/{auth_id}`
+        endpoint as well as the OIDC confirmation page
   - [x] Keep the existing CLI command display (no changes to existing behavior)
   - [x] Add a new section with instructions for Headplane QR code scanning
   - [x] Generate a QR code image that encodes the registration payload
@@ -1529,7 +1560,8 @@ After a successful scan, the device will be automatically approved.
   - [x] Validate the payload format and required fields
   - [x] Parse and display registration information to user for confirmation
 - [x] **Device approval flow**:
-  - [x] After successful scan, trigger device approval automatically via Headscale API
+  - [x] Submit the scanned auth ID and selected user through Headscale's
+        existing registration API
   - [x] Show success confirmation with device details
   - [x] Handle error cases (invalid QR code, network failure, approval failure)
   - [x] Redirect user to the newly approved device or machines list
@@ -1544,6 +1576,8 @@ After a successful scan, the device will be automatically approved.
 
 - [x] The registration page in Headscale shows both the CLI command (unchanged)
       and a QR code with instructions
+- [x] The non-OIDC `/register/{auth_id}` page shows the QR code when the auth ID
+      refers to a pending interactive registration
 - [x] The QR code can be displayed on one device and scanned from another device
       running Headplane
 - [x] Headplane's Machines page includes a "Scan QR" option
