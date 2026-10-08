@@ -11,6 +11,7 @@ import (
 	"net/netip"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/arsydoni4326-alt/headscale/hscontrol/capver"
 	"github.com/arsydoni4326-alt/headscale/hscontrol/types"
@@ -53,6 +54,28 @@ func TestHandleVerifyRequest_OversizedBodyRejected(t *testing.T) {
 
 	assert.Equal(t, http.StatusRequestEntityTooLarge, httpErr.Code,
 		"oversized body must surface 413")
+}
+
+func TestRegisterHandlerRendersQRForPendingRegistration(t *testing.T) {
+	app := createTestApp(t)
+	authID := types.MustAuthID()
+	app.state.SetAuthCacheEntry(authID, types.NewRegisterAuthRequest(&types.RegistrationData{}))
+
+	req := httptest.NewRequest(http.MethodGet, "/register/"+authID.String(), nil)
+	rec := httptest.NewRecorder()
+	app.HTTPHandler().ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "text/html; charset=utf-8", rec.Header().Get("Content-Type"))
+	assert.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
+	assert.Contains(t, rec.Body.String(), "headscale auth register --auth-id "+authID.String())
+	assert.Contains(t, rec.Body.String(), "Or scan with Headplane")
+	assert.Contains(t, rec.Body.String(), `src="data:image/png;base64,`)
+
+	pending, ok := app.state.GetAuthCacheEntry(authID)
+	require.True(t, ok)
+	assert.False(t, pending.ExpiresAt().IsZero())
+	assert.True(t, pending.ExpiresAt().After(time.Now()))
 }
 
 // TestVerifyHandler_SuccessSetsJSONContentType verifies that a successful

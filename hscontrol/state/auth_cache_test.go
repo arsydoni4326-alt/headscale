@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/arsydoni4326-alt/headscale/hscontrol/types"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -61,4 +61,18 @@ func TestAuthCacheBoundedLRU(t *testing.T) {
 		_, ok := cache.Get(ids[i])
 		assert.True(t, ok, "non-evicted entry %d should still be in the cache", i)
 	}
+}
+
+func TestSetAuthCacheEntryPreservesQRExpiry(t *testing.T) {
+	s := &State{
+		authCache:           expirable.NewLRU[types.AuthID, *types.AuthRequest](1, nil, time.Hour),
+		authCacheExpiration: time.Hour,
+	}
+	entry := types.NewRegisterAuthRequest(&types.RegistrationData{})
+	expiresAt := time.Now().Add(10 * time.Minute).Round(0)
+	entry.SetExpiry(expiresAt)
+
+	s.SetAuthCacheEntry(types.MustAuthID(), entry)
+
+	assert.Equal(t, expiresAt, entry.ExpiresAt())
 }

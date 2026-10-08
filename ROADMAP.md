@@ -1480,13 +1480,13 @@ Run the command below in the headscale server to add this node to your network:
 headscale auth register --auth-id <hskey> --user USERNAME
 
 Or you can go to Headplane:
-Go to Machines → Click Add Device → Scan QR → Choose User → Click Scan QR
+Go to Machines → Scan QR → Choose User → Start Scanning
 
 [QR CODE IMAGE]
 ```
 
-In Headplane, the QR code scanner will be located in:
-**Machines → Add Device → Scan QR → Choose User → Scan QR**
+In Headplane, the QR code scanner is located in:
+**Machines → Scan QR → Choose User → Start Scanning**
 
 After a successful scan, the device will be automatically approved.
 
@@ -1517,8 +1517,8 @@ After a successful scan, the device will be automatically approved.
 #### Frontend (Headplane)
 
 - [x] **Machines page enhancement**:
-  - [x] Add "Add Device" button or menu option in Machines page
-  - [x] Create "Scan QR" flow within Add Device workflow
+  - [x] Add a "Scan QR" action to the Machines page
+  - [x] Create a standalone Scan QR workflow
   - [x] Integrate QR code scanner using browser camera API
   - [x] Add user/namespace selection step before or after scanning
   - [x] Handle camera permissions and error states gracefully
@@ -1546,7 +1546,7 @@ After a successful scan, the device will be automatically approved.
       and a QR code with instructions
 - [x] The QR code can be displayed on one device and scanned from another device
       running Headplane
-- [x] Headplane's "Add Device" flow includes a "Scan QR" option
+- [x] Headplane's Machines page includes a "Scan QR" option
 - [x] The QR scanner successfully captures and parses the registration payload
 - [x] After scanning, the user can select the target user/namespace
 - [x] The device is successfully registered and approved after scan completion
@@ -1641,7 +1641,7 @@ Recommendation: Use JSON payload for extensibility and clearer structure.
   - [x] Document the step-by-step flow
 - [x] Update Headplane documentation:
   - [x] `headplane/docs/usage/device-registration.md` (or similar)
-  - [x] Document the "Add Device → Scan QR" flow
+  - [x] Document the "Machines → Scan QR" flow
   - [x] Include troubleshooting section for camera permissions
 - [x] Update API documentation if new endpoints are added
 - [x] Update `CHANGELOG.md` with the new feature
