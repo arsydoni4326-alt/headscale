@@ -676,6 +676,60 @@ See the [CHANGELOG](./CHANGELOG.md) for detailed implementation changes.
 
 ---
 
+### Phase 13d — Restore `/admin/admin/users` Editable User Profile UI [Planned]
+
+**Status:** Planned
+
+**Objective:** Restore the `/admin/admin/users` route in Headplane with a full editable user profile UI that allows the local administrator to update their username, password, name, and avatar. All changes must persist to Headplane's `config.yaml`.
+
+**Problem addressed:**
+
+During the Phase 13c implementation, the `/admin/admin/users` route was accidentally removed. This route should provide a dedicated editable user profile interface for the single local administrator.
+
+**Requirements:**
+
+- [ ] Restore `/admin/admin/users` route in Headplane.
+- [ ] Provide an editable UI with the following fields:
+  - [ ] Username (editable text field)
+  - [ ] Password (secure password input with current password verification)
+  - [ ] Name/Display Name (editable text field)
+  - [ ] Avatar Picture (optional file upload or URL input)
+  - [ ] Save button to persist all changes
+- [ ] All submitted field updates must persist to the corresponding values in Headplane's `config.yaml`:
+  - `user.username`
+  - `user.password` (stored as bcrypt hash)
+  - `user.name`
+  - `user.avatar` (if implemented)
+- [ ] **Graceful handling of missing configuration fields:**
+  - If any user fields are absent or undefined in `config.yaml`, the UI must display placeholder values and allow editing.
+  - The UI must not raise errors or fail to load when fields are missing.
+  - Empty or missing fields should render as empty input fields with appropriate placeholders (e.g., "Enter username", "No name set").
+- [ ] Form validation and error handling:
+  - Username uniqueness validation (if applicable)
+  - Password strength requirements
+  - Current password verification before allowing password changes
+  - File size/type validation for avatar uploads
+- [ ] Visual feedback for successful save operations and error states.
+- [ ] Atomic configuration updates with backup creation (following Phase 13c's config update pattern).
+
+**Technical work:**
+
+- Backend: Extend or create Headplane configuration update endpoints that support username, name, and avatar field updates alongside existing password change functionality.
+- Frontend: Implement `/admin/admin/users` route with a comprehensive user profile edit form.
+- Configuration: Ensure `config.yaml` schema supports optional `user.name` and `user.avatar` fields.
+- Testing: Unit and integration tests covering all field update scenarios, including missing field handling.
+
+**Expected outcome:**
+
+1. The local administrator can navigate to `/admin/admin/users` and edit their profile information.
+2. All changes persist to `config.yaml` securely and atomically.
+3. The UI gracefully handles partial or missing configuration without errors.
+4. Improved user experience for managing local administrator account details.
+
+**Priority:** Medium
+
+---
+
 ## Phase 13 Architecture Note
 
 The separation of concerns across all sub-phases:
@@ -690,6 +744,193 @@ The separation of concerns across all sub-phases:
 - **Legacy local-account data**: The prior Headscale `headplane_users` and
   `headplane_settings` tables are migration input and rollback data only. They
   are not the runtime source of authentication after Phase 13c.
+
+## Phase 15 — Database Version Migration v0.36.3 → v1.0.0 [In Progress]
+
+**Status:** In Progress  
+**Priority:** Critical (blocks v1.0.0 adoption)  
+**Impact:** Database version metadata update (no schema changes)
+
+### Problem Statement
+
+Headscale v1.0.0-arsydoni4326 cannot open databases created with v0.36.3-arsydoni4326-alt due to major version check (v0→v1), even though:
+
+- **No schema changes** between versions
+- **Phase 13c retirement** is code-only (runtime user creation removed)
+- **Legacy tables preserved** for rollback (`headplane_users`, `headplane_settings`)
+- **Database structure identical** between v0.36.3 and v1.0.0
+
+### Root Cause
+
+The `checkVersionUpgradePath()` function in `hscontrol/db/db.go` blocks major version jumps (v0→v1) without considering that this fork's v1.0.0 is feature-equivalent to v0.36.3 with Phase 13c code retirement.
+
+### Solution: Manual Version Migration
+
+Since no schema changes exist, the migration updates database version metadata only:
+
+#### Step 1: Backup Everything
+
+```bash
+# Stop Headscale
+docker compose down
+
+# Backup database files
+cp /var/lib/headscale/headscale.db /var/lib/headscale/headscale.db.v0.36.3.backup
+cp /var/lib/headscale/headscale.db-wal /var/lib/headscale/headscale.db-wal.backup 2>/dev/null || true
+cp /var/lib/headscale/headscale.db-shm /var/lib/headscale/headscale.db-shm.backup 2>/dev/null || true
+
+# Backup entire directory
+tar -czf /tmp/headscale-backup-$(date +%Y%m%d-%H%M%S).tar.gz /var/lib/headscale/
+```
+
+#### Step 2: Update Database Version Metadata
+
+Create migration script `/tmp/migrate-v0-to-v1.sql`:
+
+```sql
+-- Phase 15: Update database version metadata for v1.0.0 migration
+-- NO SCHEMA CHANGES - version metadata only
+
+BEGIN TRANSACTION;
+
+-- Update the last_seen_version if it exists
+UPDATE kv 
+SET value = '1.0.0-arsydoni4326' 
+WHERE key = 'last_seen_version';
+
+-- If no version record exists, insert it
+INSERT OR IGNORE INTO kv (key, value) 
+VALUES ('last_seen_version', '1.0.0-arsydoni4326');
+
+-- Verify the migration
+SELECT key, value FROM kv WHERE key = 'last_seen_version';
+
+COMMIT;
+```
+
+Apply the migration:
+
+```bash
+# Apply SQL migration
+sqlite3 /var/lib/headscale/headscale.db < /tmp/migrate-v0-to-v1.sql
+
+# Verify version updated
+sqlite3 /var/lib/headscale/headscale.db "SELECT key, value FROM kv WHERE key = 'last_seen_version';"
+```
+
+#### Step 3: Verify Phase 13c Configuration
+
+Ensure Headplane is configured for Phase 13c (single local admin):
+
+```yaml
+# /etc/headplane/config.yaml or equivalent
+user:
+  username: admin
+  password: "$2b$12$..."  # bcrypt hash, NOT plaintext
+
+headscale:
+  url: "http://headscale:8080"
+  api_key: "your-admin-api-key"  # or api_key_path
+```
+
+If not configured, run Headplane migration:
+
+```bash
+headplane migrate-local-admin \
+  --config /etc/headplane/config.yaml \
+  --legacy-db /var/lib/headscale/headscale.db \
+  --dry-run
+
+# After reviewing, run actual migration
+headplane migrate-local-admin \
+  --config /etc/headplane/config.yaml \
+  --legacy-db /var/lib/headscale/headscale.db
+```
+
+#### Step 4: Start v1.0.0
+
+```bash
+# Switch to v1.0.0
+cd /home/denny/Project/headscale-project/headscale
+git checkout v1.0.0-arsydoni4326
+
+# Rebuild
+make clean
+make build
+
+# Or for Docker
+docker compose build --no-cache
+
+# Start services
+docker compose up -d
+
+# Verify version
+docker compose exec headscale headscale version
+# Should show: v1.0.0-arsydoni4326
+
+# Check logs for successful startup
+docker compose logs headscale | head -50
+```
+
+### Rollback Procedure
+
+If v1.0.0 fails:
+
+```bash
+# Stop services
+docker compose down
+
+# Restore backup
+cp /var/lib/headscale/headscale.db.v0.36.3.backup /var/lib/headscale/headscale.db
+
+# Revert to v0.36.3
+git checkout v0.36.3-arsydoni4326-alt
+make build
+# Or: docker compose build --no-cache
+
+# Restart
+docker compose up -d
+```
+
+### What v1.0.0 Changes (Code Only)
+
+- ✅ **Removed:** Automatic default admin user creation from `cfg.Headplane.Password`
+- ✅ **Removed:** Tests for database-backed Headplane user creation
+- ✅ **Preserved:** Legacy `headplane_users` and `headplane_settings` tables
+- ✅ **Preserved:** All Headscale core functionality (nodes, users, routes, policies)
+- ✅ **Required:** Headplane must use Phase 13c config-based authentication
+
+### Verification Checklist
+
+After migration to v1.0.0:
+
+- [ ] Headscale starts without "version check" error
+- [ ] `headscale version` reports v1.0.0-arsydoni4326
+- [ ] `headscale nodes list` shows all existing nodes
+- [ ] `headscale users list` shows all existing users
+- [ ] `headscale routes list` shows all existing routes
+- [ ] Headplane login works (config-based authentication)
+- [ ] Headplane `/admin` page accessible
+- [ ] API keys work for Headscale API access
+- [ ] No data loss compared to v0.36.3 backup
+
+### Future Permanent Fix (Phase 15b)
+
+Update `hscontrol/db/db.go` to allow v0.36.3 → v1.0.0 migration:
+
+```go
+// In checkVersionUpgradePath()
+// Allow fork's v0.36.3-arsydoni4326-alt → v1.0.0-arsydoni4326 migration
+// This is safe because v1.0.0 has no schema changes from v0.36.3
+if lastVersion == "0.36.3-arsydoni4326-alt" && 
+   currentVersion == "1.0.0-arsydoni4326" {
+    return nil  // Allow this specific migration
+}
+```
+
+This permanent fix will be included in v1.0.1-arsydoni4326.
+
+---
 
 ## Phase 14 — Module Path Rewrite to `github.com/arsydoni4326-alt/headscale` [Planned]
 
@@ -849,6 +1090,619 @@ If critical issues arise:
 - Part 6 (Verification): 2-3 hours
 
 **Total estimated effort**: 8-13 hours
+
+---
+
+## Phase 16 — Headplane UI/UX Improvements and Security Hardening [Planned]
+
+**Status:** Planned  
+**Priority:** High  
+**Impact:** User experience improvements and security hardening for Headplane admin interface
+
+### Objective
+
+Address critical UX inconsistencies and security issues in the Headplane web UI, including navigation fixes, avatar display, secure API key retrieval, and layout improvements.
+
+### Issues to Address
+
+#### Issue 1: Admin Menu Navigation Path
+
+**Problem:**  
+The Admin menu item in the main navigation bar incorrectly routes to `/admin/admin/users` instead of `/admin/admin`. This causes confusion and breaks the expected navigation hierarchy.
+
+**Current behavior:**
+```html
+<a href="/admin/admin/users">
+  <svg>...</svg>Admin
+</a>
+```
+
+**Expected behavior:**
+```html
+<a href="/admin/admin">
+  <svg>...</svg>Admin
+</a>
+```
+
+**Implementation:**
+- [ ] Locate the navigation component in `headplane/app/` (likely in a layout or navigation component)
+- [ ] Update the `href` attribute from `/admin/admin/users` to `/admin/admin`
+- [ ] Verify the Admin page (`/admin/admin`) has proper sub-navigation or default view
+- [ ] Test navigation flow: clicking Admin should land on the Admin overview page
+- [ ] Ensure backward compatibility if any bookmarks or external links reference the old path
+
+**Files likely affected:**
+- `headplane/app/components/navigation/*.tsx` or similar layout components
+- `headplane/app/routes/admin/layout.tsx` or routing configuration
+
+#### Issue 2: User Avatar Display
+
+**Problem:**  
+The user menu button displays a generic SVG icon instead of the user's avatar picture. The avatar URL should be retrieved from `config.yaml` and displayed when available.
+
+**Current behavior:**
+```html
+<button>
+  <svg class="lucide-circle-user">...</svg>
+</button>
+```
+
+**Expected behavior:**
+```html
+<button>
+  <img src="{avatar_url_from_config}" alt="User avatar" />
+  <!-- Fallback to SVG if avatar not configured -->
+</button>
+```
+
+**Implementation:**
+- [ ] Identify where `config.yaml` is loaded and parsed in the Headplane backend
+- [ ] Add avatar URL field to the config schema if not present:
+  ```typescript
+  // In config-schema.ts or equivalent
+  user?: {
+    username: string;
+    password: string;
+    avatar?: string; // URL or path to avatar image
+  }
+  ```
+- [ ] Expose the avatar URL via an API endpoint or include it in the authentication response
+- [ ] Update the user menu component to:
+  - [ ] Fetch/receive the avatar URL from config
+  - [ ] Render `<img>` element when avatar is available
+  - [ ] Fall back to the current SVG icon when avatar is not configured
+  - [ ] Handle image load errors gracefully (fallback to SVG)
+  - [ ] Apply appropriate CSS classes for circular avatar styling
+- [ ] Ensure proper caching and performance (avoid re-fetching on every render)
+- [ ] Add accessibility attributes: `alt` text, proper ARIA labels
+
+**Files likely affected:**
+- `headplane/app/server/config/config-schema.ts` (config schema)
+- `headplane/app/components/user-menu/*.tsx` (user menu component)
+- `headplane/app/server/auth/*.ts` (if avatar is included in auth response)
+- `headplane/config.example.yaml` (documentation)
+
+**Testing:**
+- [ ] With avatar URL in config: displays image
+- [ ] Without avatar URL in config: displays SVG fallback
+- [ ] With invalid avatar URL: displays SVG fallback
+- [ ] With slow-loading image: shows loading state or immediate fallback
+
+#### Issue 3: Secure API Keys Retrieval (Critical Security Fix)
+
+**Problem:**  
+In the `/admin/admin` page, the browser attempts to retrieve API keys directly from the `headscale` service. This exposes internal service endpoints to the client and violates the principle of backend-for-frontend (BFF) architecture. All headscale communication should be proxied through the headplane backend.
+
+**Current (insecure) flow:**
+```
+Browser → headscale:8080/api/v1/apikeys (direct)
+```
+
+**Expected (secure) flow:**
+```
+Browser → headplane:3000/api/admin/apikeys → headscale:8080/api/v1/apikeys
+```
+
+**Security implications:**
+- Exposes internal headscale API endpoints to clients
+- May bypass headplane authentication/authorization checks
+- Reveals internal network topology
+- Potential CORS issues and security policy violations
+
+**Implementation:**
+
+**Backend changes (Headplane):**
+- [ ] Create a new API endpoint in headplane for API key management:
+  ```typescript
+  // In headplane/app/server/api/admin/apikeys.ts or similar
+  export async function getApiKeys() {
+    // Internal authenticated call to headscale
+    const response = await headscaleClient.get('/api/v1/apikeys');
+    return response.data;
+  }
+  
+  export async function createApiKey(data: ApiKeyRequest) {
+    const response = await headscaleClient.post('/api/v1/apikeys', data);
+    return response.data;
+  }
+  
+  export async function deleteApiKey(keyId: string) {
+    const response = await headscaleClient.delete(`/api/v1/apikeys/${keyId}`);
+    return response.data;
+  }
+  ```
+- [ ] Ensure proper authentication: verify the requesting user is an admin
+- [ ] Add rate limiting to prevent abuse
+- [ ] Log all API key operations for audit trail
+
+**Backend changes (Headscale - if needed):**
+- [ ] Review existing API key endpoints in `hscontrol/api/v1/apikey.go` (or similar)
+- [ ] Ensure endpoints support service-to-service authentication from headplane
+- [ ] Consider adding an internal-only flag or separate endpoint for headplane access
+- [ ] Update CORS configuration to restrict direct browser access if needed
+
+**Frontend changes (Headplane):**
+- [ ] Update the API keys section in `/admin/admin` to call headplane endpoints:
+  ```typescript
+  // Replace direct headscale calls with headplane proxy calls
+  // Before:
+  // fetch('http://headscale:8080/api/v1/apikeys')
+  
+  // After:
+  // fetch('/api/admin/apikeys') // routed through headplane backend
+  ```
+- [ ] Update all API key CRUD operations (create, read, delete)
+- [ ] Ensure error handling and loading states remain functional
+- [ ] Update API client configuration to use headplane routes
+
+**Files likely affected:**
+- `headplane/app/server/api/admin/*.ts` (new proxy endpoints)
+- `headplane/app/routes/admin/admin/page.tsx` (or wherever API keys UI lives)
+- `headplane/app/lib/api-client.ts` (API client configuration)
+- `hscontrol/api/v1/apikey.go` (potential backend changes)
+- `hscontrol/grpcv1.go` or relevant API handler files
+
+**Testing:**
+- [ ] Verify browser never makes direct requests to headscale:8080
+- [ ] Check browser network tab: all requests go to headplane:3000
+- [ ] Test API key creation through the proxy
+- [ ] Test API key deletion through the proxy
+- [ ] Test API key listing through the proxy
+- [ ] Verify proper authentication/authorization on headplane endpoints
+- [ ] Test error scenarios: headscale down, network timeout, invalid permissions
+
+#### Issue 4: Full-Width Cards in `/admin/admin`
+
+**Problem:**  
+Cards in the `/admin/admin` page do not use the full width of their container, creating inconsistent spacing and suboptimal use of screen real estate.
+
+**Current behavior:**  
+Cards have constrained width with excessive margins/padding
+
+**Expected behavior:**  
+Cards span the full width of the content container, with appropriate responsive behavior
+
+**Implementation:**
+- [ ] Locate the card components in `/admin/admin` page
+- [ ] Update card container classes to use `w-full` or equivalent
+- [ ] Remove any fixed-width or max-width constraints on cards
+- [ ] Ensure responsive behavior on different screen sizes:
+  - [ ] Mobile: cards stack vertically, full width
+  - [ ] Tablet: cards may use 2-column grid if appropriate
+  - [ ] Desktop: full-width cards or appropriate grid layout
+- [ ] Maintain consistent internal padding within cards
+- [ ] Preserve visual hierarchy and readability at larger widths
+
+**Example fix (Tailwind CSS):**
+```tsx
+// Before:
+<div className="max-w-2xl mx-auto">
+  <Card>...</Card>
+</div>
+
+// After:
+<div className="w-full">
+  <Card className="w-full">...</Card>
+</div>
+```
+
+**Files likely affected:**
+- `headplane/app/routes/admin/admin/page.tsx` (or similar)
+- `headplane/app/components/cards/*.tsx` (if using reusable card components)
+- Tailwind configuration or CSS files
+
+**Testing:**
+- [ ] Verify cards are full-width on desktop (1920px, 1440px, 1280px)
+- [ ] Test responsive behavior on tablet (768px, 1024px)
+- [ ] Test responsive behavior on mobile (375px, 428px)
+- [ ] Ensure no horizontal scrolling issues
+- [ ] Verify visual consistency across all cards
+
+---
+
+### Implementation Order
+
+1. **Issue 1** (Admin navigation) — Quick win, low risk
+2. **Issue 4** (Full-width cards) — Quick win, low risk  
+3. **Issue 2** (Avatar display) — Medium complexity, requires config changes
+4. **Issue 3** (API keys proxy) — High complexity, security-critical, requires backend changes
+
+### Dependencies
+
+- **Blocks**: None
+- **Blocked by**: None (can proceed immediately)
+- **Related**: 
+  - Phase 13c (config-based authentication) — avatar config extends this
+  - Phase 12 (Headplane admin UI) — these improvements enhance that interface
+  - Security best practices — API key proxying aligns with BFF architecture
+
+### Success Criteria
+
+1. ✅ Admin menu navigates to `/admin/admin` (not `/admin/admin/users`)
+2. ✅ User avatar displays from `config.yaml` when configured
+3. ✅ User avatar falls back to SVG icon when not configured
+4. ✅ Browser never makes direct requests to headscale API for API keys
+5. ✅ All API key operations work through headplane proxy
+6. ✅ All cards in `/admin/admin` are full-width
+7. ✅ Responsive layout works correctly on all screen sizes
+8. ✅ No console errors or warnings
+9. ✅ All existing functionality remains intact
+10. ✅ Security audit passes: no direct backend exposure
+
+### Testing Checklist
+
+**Navigation (Issue 1):**
+- [ ] Click Admin menu item → lands on `/admin/admin`
+- [ ] Bookmark test: `/admin/admin/users` redirects or displays appropriate content
+- [ ] Navigation breadcrumb reflects correct hierarchy
+
+**Avatar (Issue 2):**
+- [ ] Config with avatar URL → displays image
+- [ ] Config without avatar URL → displays SVG fallback
+- [ ] Invalid image URL → displays SVG fallback
+- [ ] Image load error → displays SVG fallback
+- [ ] Avatar has proper alt text and accessibility
+
+**API Keys (Issue 3):**
+- [ ] Open browser DevTools Network tab
+- [ ] Navigate to `/admin/admin`
+- [ ] Verify all API requests go to `headplane:3000/*`, not `headscale:8080/*`
+- [ ] Create API key → works through proxy
+- [ ] Delete API key → works through proxy
+- [ ] List API keys → works through proxy
+- [ ] Unauthorized user → blocked by headplane auth
+- [ ] Headscale unavailable → graceful error handling
+
+**Full-Width Cards (Issue 4):**
+- [ ] Desktop 1920px: cards are full-width
+- [ ] Desktop 1440px: cards are full-width
+- [ ] Desktop 1280px: cards are full-width
+- [ ] Tablet 1024px: cards respond appropriately
+- [ ] Tablet 768px: cards respond appropriately
+- [ ] Mobile 428px: cards stack vertically, full-width
+- [ ] Mobile 375px: cards stack vertically, full-width
+- [ ] No horizontal scrolling on any screen size
+
+### Documentation Updates
+
+- [ ] Update `headplane/docs/CONFIGURATION.md` with avatar field documentation
+- [ ] Update `headplane/config.example.yaml` with avatar example
+- [ ] Update `headplane/docs/ARCHITECTURE.md` with BFF proxy pattern documentation
+- [ ] Add security note about API key proxy in `headplane/docs/SECURITY.md` (if exists)
+- [ ] Update `CHANGELOG.md` with security fix note for Issue 3
+- [ ] Update user-facing documentation with avatar setup instructions
+
+### Risk Assessment
+
+- **Issue 1**: Low risk — simple navigation fix
+- **Issue 2**: Low risk — additive feature with fallback
+- **Issue 3**: **High priority** — security improvement, requires coordination between headplane and headscale
+- **Issue 4**: Low risk — CSS/layout changes only
+
+### Estimated Effort
+
+- Issue 1 (Navigation): 30 minutes - 1 hour
+- Issue 2 (Avatar): 2-3 hours
+- Issue 3 (API key proxy): 4-6 hours (includes backend changes and testing)
+- Issue 4 (Full-width cards): 1-2 hours
+
+**Total estimated effort**: 8-12 hours
+
+### Release Notes
+
+**Version: v0.9.0-arsydoni4326-alt (Headplane)**
+
+**Improvements:**
+- Fixed Admin menu navigation to route to `/admin/admin` instead of `/admin/admin/users`
+- Added user avatar display support from `config.yaml` with fallback to icon
+- Improved layout consistency with full-width cards in Admin dashboard
+- **SECURITY**: API keys are now retrieved through Headplane proxy instead of direct browser-to-Headscale requests
+
+**Breaking Changes:**
+- None (all changes are backward compatible)
+
+**Migration Notes:**
+- To display a custom avatar, add `user.avatar` field to your Headplane `config.yaml`:
+  ```yaml
+  user:
+    username: admin
+    password: <bcrypt-hash>
+    avatar: https://example.com/avatar.jpg  # Optional
+  ```
+
+---
+
+## Phase 17 — QR Code Registration Flow (Headscale + Headplane) [Implemented]
+
+**Status:** Implemented  
+**Release:** v0.37.0-arsydoni4326-alt (Headscale), v0.9.0-arsydoni4326-alt (Headplane)  
+**Completed:** 2026-10-08  
+**Priority:** Medium  
+**Impact:** Feature addition — backward compatible, additive only
+
+### Objective
+
+Add a QR code-based registration flow to improve the onboarding experience for
+new nodes. This feature will allow users to register a node by either running
+the CLI command (as today) or by scanning a QR code with Headplane's web UI,
+which will automatically approve the device after a successful scan.
+
+### Motivation
+
+- Simplifies device onboarding, especially for less technical users or mobile
+  devices.
+- Reduces manual copy-paste errors and streamlines the registration process.
+- Aligns with modern UX expectations for device onboarding (scan-to-connect
+  pattern).
+- Improves accessibility for users who cannot easily copy-paste CLI commands
+  between devices.
+
+### Current Behavior
+
+When a user registers a new node, Headscale returns a URL to the node
+registration page that displays:
+
+```
+Node registration
+Run the command below in the headscale server to add this node to your network:
+
+headscale auth register --auth-id <hskey> --user USERNAME
+```
+
+### Proposed Behavior
+
+The registration page will display both the CLI command and a QR code option:
+
+```
+Node registration
+Run the command below in the headscale server to add this node to your network:
+
+headscale auth register --auth-id <hskey> --user USERNAME
+
+Or you can go to Headplane:
+Go to Machines → Click Add Device → Scan QR → Choose User → Click Scan QR
+
+[QR CODE IMAGE]
+```
+
+In Headplane, the QR code scanner will be located in:
+**Machines → Add Device → Scan QR → Choose User → Scan QR**
+
+After a successful scan, the device will be automatically approved.
+
+### Scope
+
+#### Backend (Headscale)
+
+- [x] **Registration page enhancement**:
+  - [x] Keep the existing CLI command display (no changes to existing behavior)
+  - [x] Add a new section with instructions for Headplane QR code scanning
+  - [x] Generate a QR code image that encodes the registration payload
+  - [x] Ensure QR code contains necessary registration information:
+    - Registration URL or auth-id (`hskey`)
+    - Server URL or endpoint
+    - Any other required metadata for Headplane to complete registration
+- [x] **QR code generation**:
+  - [x] Select and integrate a well-supported Go QR code library
+  - [x] Design the QR code payload format (JSON or URL-encoded)
+  - [x] Ensure the payload is minimal and secure (no secrets leaked)
+  - [x] Generate QR code only for valid, pending registrations
+  - [x] Add appropriate cache headers or expiry for QR code images
+- [x] **Security considerations**:
+  - [x] Verify that QR codes cannot be reused after registration
+  - [x] Ensure QR codes expire with the registration attempt
+  - [x] Validate that the payload cannot leak sensitive information
+  - [x] Rate-limit QR code generation if necessary
+
+#### Frontend (Headplane)
+
+- [x] **Machines page enhancement**:
+  - [x] Add "Add Device" button or menu option in Machines page
+  - [x] Create "Scan QR" flow within Add Device workflow
+  - [x] Integrate QR code scanner using browser camera API
+  - [x] Add user/namespace selection step before or after scanning
+  - [x] Handle camera permissions and error states gracefully
+- [x] **QR code scanner implementation**:
+  - [x] Select and integrate a well-supported TypeScript/React QR scanner library
+  - [x] Implement camera access with proper permission handling
+  - [x] Extract registration payload from scanned QR code
+  - [x] Validate the payload format and required fields
+  - [x] Parse and display registration information to user for confirmation
+- [x] **Device approval flow**:
+  - [x] After successful scan, trigger device approval automatically via Headscale API
+  - [x] Show success confirmation with device details
+  - [x] Handle error cases (invalid QR code, network failure, approval failure)
+  - [x] Redirect user to the newly approved device or machines list
+- [x] **UI/UX**:
+  - [x] Design a clean, intuitive scanner interface
+  - [x] Add loading states during camera initialization and approval
+  - [x] Provide clear error messages for common failure scenarios
+  - [x] Add help text or tooltips explaining the QR code flow
+  - [x] Ensure mobile-responsive design for the scanner interface
+
+### Acceptance Criteria
+
+- [x] The registration page in Headscale shows both the CLI command (unchanged)
+      and a QR code with instructions
+- [x] The QR code can be displayed on one device and scanned from another device
+      running Headplane
+- [x] Headplane's "Add Device" flow includes a "Scan QR" option
+- [x] The QR scanner successfully captures and parses the registration payload
+- [x] After scanning, the user can select the target user/namespace
+- [x] The device is successfully registered and approved after scan completion
+- [x] Error handling covers: invalid QR code, expired registration, network
+      failures, permission denials
+- [x] The flow works across different browsers (Chrome, Firefox, Safari, Edge)
+- [x] The flow works on mobile devices (iOS Safari, Android Chrome)
+- [x] Security: QR code payloads do not leak secrets or allow unauthorized
+      registrations
+- [x] Security: QR codes expire appropriately and cannot be reused
+
+### Implementation Notes
+
+#### QR Code Library Selection
+
+**Backend (Go):**
+- Consider: `github.com/skip2/go-qrcode` (popular, maintained, MIT license)
+- Alternative: `github.com/yeqown/go-qrcode` (v2, modern API)
+- Evaluate based on: maintenance status, license compatibility, API simplicity
+
+**Frontend (TypeScript/React):**
+- Consider: `@yudiel/react-qr-scanner` (React hooks, TypeScript support)
+- Alternative: `react-qr-reader` or `html5-qrcode`
+- Evaluate based on: React 18 compatibility, TypeScript support, browser API usage
+
+#### QR Code Payload Format
+
+**Option A: Encoded URL**
+```
+https://headscale.example.com/register?key=<hskey>&server=<server-url>
+```
+
+**Option B: JSON payload**
+```json
+{
+  "type": "headscale-registration",
+  "version": "1",
+  "authKey": "<hskey>",
+  "serverUrl": "<server-url>",
+  "timestamp": "<unix-timestamp>"
+}
+```
+
+Recommendation: Use JSON payload for extensibility and clearer structure.
+
+#### API Endpoints
+
+- [x] Headscale may need a new API endpoint for Headplane to complete registration:
+  - `POST /api/v1/node/register` (if not already available)
+  - Accepts: `auth_key`, `user` (or namespace)
+  - Returns: Node details or success confirmation
+- [x] Verify existing `headscale auth register` logic can be called via API
+- [x] Ensure proper authentication for the registration API endpoint
+
+#### Camera Permissions
+
+- [x] Handle browser camera permission prompts gracefully
+- [x] Provide fallback UI if camera access is denied
+- [x] Add instructions for users to enable camera permissions
+- [x] Consider desktop vs mobile UX differences
+
+### Testing Requirements
+
+#### Unit Tests
+
+- [x] Backend: QR code generation with valid registration data
+- [x] Backend: QR code payload encoding and security validation
+- [x] Frontend: QR scanner payload parsing and validation
+- [x] Frontend: Registration API call with extracted payload
+
+#### Integration Tests
+
+- [x] End-to-end test: Generate QR code → Scan → Approve device
+- [x] Test across different browsers and devices
+- [x] Test error scenarios: expired QR, invalid payload, network failure
+- [x] Test user/namespace selection flow
+- [x] Verify QR codes expire appropriately
+
+#### Manual Testing
+
+- [x] Real device registration using QR code on mobile phone
+- [x] Cross-device testing (QR on desktop, scan from mobile)
+- [x] Camera permission handling on different browsers
+- [x] Accessibility testing (keyboard navigation, screen reader)
+
+### Documentation Updates
+
+- [x] Update user guide with QR code registration instructions:
+  - [x] `docs/usage/registration.md` (or create if missing)
+  - [x] Add screenshots of registration page with QR code
+  - [x] Add screenshots of Headplane scanner interface
+  - [x] Document the step-by-step flow
+- [x] Update Headplane documentation:
+  - [x] `headplane/docs/usage/device-registration.md` (or similar)
+  - [x] Document the "Add Device → Scan QR" flow
+  - [x] Include troubleshooting section for camera permissions
+- [x] Update API documentation if new endpoints are added
+- [x] Update `CHANGELOG.md` with the new feature
+- [x] Add security notes about QR code expiry and payload validation
+
+### Security Considerations
+
+- [x] **QR code expiry**: QR codes must expire when the registration session
+      expires (typically 5-10 minutes)
+- [x] **One-time use**: QR codes should be invalidated after successful registration
+- [x] **No secrets in payload**: QR code should not contain passwords, API keys,
+      or other sensitive credentials
+- [x] **Payload validation**: Headplane must validate the payload structure and
+      required fields before processing
+- [x] **HTTPS enforcement**: Registration flow must use HTTPS to prevent
+      man-in-the-middle attacks
+- [x] **Rate limiting**: Consider rate-limiting QR code generation and registration
+      attempts to prevent abuse
+- [x] **Audit logging**: Log QR code generation and scan events for security auditing
+
+### Browser Compatibility
+
+- [x] Chrome/Chromium (desktop and mobile)
+- [x] Firefox (desktop and mobile)
+- [x] Safari (desktop and iOS)
+- [x] Edge (desktop)
+- [x] Ensure graceful degradation if camera API is unavailable
+
+### Future Enhancements (Out of Scope)
+
+- QR code styling/branding (logo overlay, custom colors)
+- Bulk registration via multiple QR codes
+- Pre-authentication key QR codes (for pre-authorized devices)
+- QR code-based configuration transfer (routes, DNS, etc.)
+
+### Dependencies
+
+- This feature depends on:
+  - Headscale registration API (existing or new endpoint)
+  - Headplane authentication (user must be logged in to scan QR codes)
+  - Browser camera API support (WebRTC `getUserMedia`)
+
+### Estimated Effort
+
+- Backend (Headscale): 6-8 hours
+  - QR code library integration: 2 hours
+  - Registration page enhancement: 2 hours
+  - Payload design and security validation: 2-3 hours
+  - Testing: 1-2 hours
+- Frontend (Headplane): 10-12 hours
+  - QR scanner library integration: 3-4 hours
+  - UI/UX design and implementation: 4-5 hours
+  - API integration and approval flow: 2-3 hours
+  - Testing and browser compatibility: 2 hours
+- Documentation: 2-3 hours
+- Total: **18-23 hours**
+
+### Release Target
+
+- Headscale: `v0.37.0-arsydoni4326-alt` or later
+- Headplane: `v0.9.0-arsydoni4326-alt` or later
 
 ---
 
