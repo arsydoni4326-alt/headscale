@@ -24,7 +24,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/hashicorp/golang-lru/v2/expirable"
 	hsdb "github.com/arsydoni4326-alt/headscale/hscontrol/db"
 	"github.com/arsydoni4326-alt/headscale/hscontrol/policy"
 	"github.com/arsydoni4326-alt/headscale/hscontrol/policy/matcher"
@@ -33,6 +32,7 @@ import (
 	"github.com/arsydoni4326-alt/headscale/hscontrol/util"
 	"github.com/arsydoni4326-alt/headscale/hscontrol/util/zlog"
 	"github.com/arsydoni4326-alt/headscale/hscontrol/util/zlog/zf"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/puzpuzpuz/xsync/v4"
