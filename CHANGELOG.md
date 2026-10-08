@@ -2,6 +2,14 @@
 
 ## Next
 
+### Features
+
+- **QR Code Registration:** Add QR code-based device registration flow. Users can now register devices by scanning a QR code displayed on the registration page using Headplane's web UI. The QR code contains the registration auth-id, server URL, and expiry timestamp. The existing CLI registration method remains available. ([Phase 17](#phase-17--qr-code-registration-flow-headscale--headplane))
+  - Backend: QR code generation with `github.com/skip2/go-qrcode` library
+  - Frontend: QR scanner component using `html5-qrcode` library
+  - Security: QR codes expire with session, single-use validation
+  - Browser support: Chrome, Firefox, Safari, Edge (desktop and mobile)
+
 ### Headplane schema repair
 
 - Fix SQLite schema validation rejecting the Headplane user and settings tables.
