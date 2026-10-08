@@ -1,10 +1,10 @@
 package templates
 
 import (
+	"github.com/arsydoni4326-alt/headscale/hscontrol/assets"
 	"github.com/chasefleming/elem-go"
 	"github.com/chasefleming/elem-go/attrs"
 	"github.com/chasefleming/elem-go/styles"
-	"github.com/arsydoni4326-alt/headscale/hscontrol/assets"
 )
 
 // mdTypesetBody creates a body element with md-typeset styling
