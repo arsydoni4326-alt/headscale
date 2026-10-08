@@ -11,7 +11,7 @@ import (
 // TestAuthWebEdgeCases tests edge cases for the non-OIDC registration page.
 func TestAuthWebEdgeCases(t *testing.T) {
 	t.Run("empty strings", func(t *testing.T) {
-		html := AuthWeb("", "", "").Render()
+		html := AuthWeb("", "", "", "").Render()
 
 		// Should still produce valid HTML
 		assert.Contains(t, html, "<!DOCTYPE html>")
@@ -26,7 +26,7 @@ func TestAuthWebEdgeCases(t *testing.T) {
 		longAuthID := strings.Repeat("a", 500)
 		command := "headscale auth register --auth-id " + longAuthID + " --user USERNAME"
 
-		html := AuthWeb("Node registration", "Run the command below:", command).Render()
+		html := AuthWeb("Node registration", "Run the command below:", command, "").Render()
 
 		// Should contain the full command
 		assert.Contains(t, html, longAuthID)
@@ -40,7 +40,7 @@ func TestAuthWebEdgeCases(t *testing.T) {
 		// Test XSS attempt in command
 		maliciousCommand := "headscale auth register --auth-id <script>alert('xss')</script>"
 
-		html := AuthWeb("Test", "Description", maliciousCommand).Render()
+		html := AuthWeb("Test", "Description", maliciousCommand, "").Render()
 
 		// Script tags should be escaped
 		assert.NotContains(t, html, "<script>alert('xss')</script>")
@@ -53,7 +53,7 @@ func TestAuthWebEdgeCases(t *testing.T) {
 		description := "Exécutez la commande ci-dessous"
 		command := "headscale auth register --user tëst-üser"
 
-		html := AuthWeb(title, description, command).Render()
+		html := AuthWeb(title, description, command, "").Render()
 
 		// Should contain unicode characters properly
 		assert.Contains(t, html, "🚀")
@@ -62,7 +62,7 @@ func TestAuthWebEdgeCases(t *testing.T) {
 	})
 
 	t.Run("whitespace-only strings", func(t *testing.T) {
-		html := AuthWeb("   ", "\n\t", "  \n  ").Render()
+		html := AuthWeb("   ", "\n\t", "  \n  ", "").Render()
 
 		// Should still produce valid HTML
 		assert.Contains(t, html, "<!DOCTYPE html>")
@@ -72,7 +72,7 @@ func TestAuthWebEdgeCases(t *testing.T) {
 	t.Run("newlines and tabs in content", func(t *testing.T) {
 		command := "headscale auth register \\\n  --auth-id test-123 \\\n  --user USERNAME"
 
-		html := AuthWeb("Title", "Description", command).Render()
+		html := AuthWeb("Title", "Description", command, "").Render()
 
 		// Should preserve whitespace in code block
 		assert.Contains(t, html, "test-123")
@@ -403,7 +403,7 @@ func TestRegisterConfirmAccessibility(t *testing.T) {
 // TestAuthWebAccessibility tests accessibility of non-OIDC registration page.
 func TestAuthWebAccessibility(t *testing.T) {
 	t.Run("has proper heading structure", func(t *testing.T) {
-		html := AuthWeb("Node Registration", "Instructions", "command").Render()
+		html := AuthWeb("Node Registration", "Instructions", "command", "").Render()
 
 		// Should have H1 for title
 		assert.Contains(t, html, "<h1>")
@@ -412,7 +412,7 @@ func TestAuthWebAccessibility(t *testing.T) {
 	})
 
 	t.Run("code block for command", func(t *testing.T) {
-		html := AuthWeb("Title", "Desc", "headscale auth register").Render()
+		html := AuthWeb("Title", "Desc", "headscale auth register", "").Render()
 
 		// Should have proper code block structure
 		assert.Contains(t, html, "<pre>")
@@ -420,5 +420,23 @@ func TestAuthWebAccessibility(t *testing.T) {
 		assert.Contains(t, html, "headscale auth register")
 		assert.Contains(t, html, "</code>")
 		assert.Contains(t, html, "</pre>")
+	})
+
+	t.Run("QR code section appears when provided", func(t *testing.T) {
+		qrData := "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+		html := AuthWeb("Title", "Desc", "headscale auth register", qrData).Render()
+
+		// Should have QR section
+		assert.Contains(t, html, "Or scan with Headplane")
+		assert.Contains(t, html, qrData)
+		assert.Contains(t, html, `alt="Registration QR Code"`)
+	})
+
+	t.Run("QR code section omitted when empty", func(t *testing.T) {
+		html := AuthWeb("Title", "Desc", "headscale auth register", "").Render()
+
+		// Should not have QR section
+		assert.NotContains(t, html, "Or scan with Headplane")
+		assert.NotContains(t, html, "Registration QR Code")
 	})
 }
