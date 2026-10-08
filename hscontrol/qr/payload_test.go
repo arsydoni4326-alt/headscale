@@ -3,6 +3,7 @@ package qr
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -243,4 +244,144 @@ func TestPayload_RoundTrip(t *testing.T) {
 	assert.Equal(t, original.AuthID, parsed.AuthID)
 	assert.Equal(t, original.ServerURL, parsed.ServerURL)
 	assert.Equal(t, original.ExpiresAt, parsed.ExpiresAt)
+}
+
+func TestParseRegistrationPayload_MalformedJSON(t *testing.T) {
+	tests := []struct {
+		name     string
+		jsonData []byte
+		errMsg   string
+	}{
+		{
+			name:     "invalid JSON",
+			jsonData: []byte(`{invalid json`),
+			errMsg:   "failed to parse payload",
+		},
+		{
+			name:     "empty JSON",
+			jsonData: []byte(``),
+			errMsg:   "failed to parse payload",
+		},
+		{
+			name:     "null JSON",
+			jsonData: []byte(`null`),
+			errMsg:   "invalid payload type",
+		},
+		{
+			name:     "array instead of object",
+			jsonData: []byte(`[]`),
+			errMsg:   "failed to parse payload",
+		},
+		{
+			name:     "missing type field",
+			jsonData: []byte(`{"version":"1","auth_id":"hskey-abc","server_url":"https://example.com","expires_at":"2027-01-01T00:00:00Z"}`),
+			errMsg:   "invalid payload type",
+		},
+		{
+			name:     "missing version field",
+			jsonData: []byte(`{"type":"headscale-registration","auth_id":"hskey-abc","server_url":"https://example.com","expires_at":"2027-01-01T00:00:00Z"}`),
+			errMsg:   "unsupported payload version",
+		},
+		{
+			name:     "invalid time format",
+			jsonData: []byte(`{"type":"headscale-registration","version":"1","auth_id":"hskey-abc","server_url":"https://example.com","expires_at":"not-a-time"}`),
+			errMsg:   "failed to parse payload",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload, err := ParseRegistrationPayload(tt.jsonData)
+
+			assert.Error(t, err)
+			assert.Nil(t, payload)
+			assert.Contains(t, err.Error(), tt.errMsg)
+		})
+	}
+}
+
+func TestNewRegistrationPayload_SpecialCharacters(t *testing.T) {
+	tests := []struct {
+		name      string
+		authID    string
+		serverURL string
+		shouldErr bool
+	}{
+		{
+			name:      "unicode in auth ID",
+			authID:    "hskey-测试-😀",
+			serverURL: "https://headscale.example.com",
+			shouldErr: false,
+		},
+		{
+			name:      "special chars in URL",
+			serverURL: "https://headscale.example.com/path?query=value&foo=bar#fragment",
+			authID:    "hskey-abc123",
+			shouldErr: false,
+		},
+		{
+			name:      "URL with port",
+			serverURL: "https://headscale.example.com:8443",
+			authID:    "hskey-abc123",
+			shouldErr: false,
+		},
+		{
+			name:      "very long auth ID",
+			authID:    strings.Repeat("a", 1000),
+			serverURL: "https://headscale.example.com",
+			shouldErr: false,
+		},
+		{
+			name:      "very long URL",
+			serverURL: "https://headscale.example.com/" + strings.Repeat("path/", 100),
+			authID:    "hskey-abc123",
+			shouldErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			expiresAt := time.Now().Add(24 * time.Hour)
+			payload, err := NewRegistrationPayload(tt.authID, tt.serverURL, expiresAt)
+
+			if tt.shouldErr {
+				assert.Error(t, err)
+				assert.Nil(t, payload)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.authID, payload.AuthID)
+				assert.Equal(t, tt.serverURL, payload.ServerURL)
+
+				// Ensure it can round-trip
+				jsonData, err := payload.ToJSON()
+				require.NoError(t, err)
+
+				parsed, err := ParseRegistrationPayload(jsonData)
+				require.NoError(t, err)
+				assert.Equal(t, payload.AuthID, parsed.AuthID)
+				assert.Equal(t, payload.ServerURL, parsed.ServerURL)
+			}
+		})
+	}
+}
+
+func TestParseRegistrationPayload_ExtraFields(t *testing.T) {
+	// JSON with extra unknown fields should still parse successfully
+	jsonData := []byte(`{
+		"type": "headscale-registration",
+		"version": "1",
+		"auth_id": "hskey-abc123",
+		"server_url": "https://headscale.example.com",
+		"expires_at": "2027-01-01T00:00:00Z",
+		"extra_field": "should be ignored",
+		"another_field": 12345
+	}`)
+
+	payload, err := ParseRegistrationPayload(jsonData)
+
+	require.NoError(t, err)
+	assert.Equal(t, "headscale-registration", payload.Type)
+	assert.Equal(t, "1", payload.Version)
+	assert.Equal(t, "hskey-abc123", payload.AuthID)
+	assert.Equal(t, "https://headscale.example.com", payload.ServerURL)
 }
