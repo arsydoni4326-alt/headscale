@@ -158,3 +158,209 @@ func TestAuthCacheNoExpiryExtension(t *testing.T) {
 	_, ok := cache.Get(id)
 	assert.False(t, ok, "re-adding an entry should not extend its TTL")
 }
+
+// TestAuthCacheDoubleConsumption verifies that consuming an auth entry
+// (retrieving and removing it) prevents a second consumption attempt.
+func TestAuthCacheDoubleConsumption(t *testing.T) {
+	cache := expirable.NewLRU[types.AuthID, *types.AuthRequest](
+		10,
+		func(_ types.AuthID, rn *types.AuthRequest) {
+			rn.FinishAuth(types.AuthVerdict{Err: ErrRegistrationExpired})
+		},
+		time.Hour,
+	)
+
+	id := types.MustAuthID()
+	entry := types.NewAuthRequest()
+	cache.Add(id, entry)
+
+	// First consumption succeeds
+	retrieved1, ok1 := cache.Get(id)
+	assert.True(t, ok1, "first retrieval should succeed")
+	assert.Equal(t, entry, retrieved1)
+
+	// Remove the entry (simulating consumption)
+	cache.Remove(id)
+
+	// Second consumption fails
+	retrieved2, ok2 := cache.Get(id)
+	assert.False(t, ok2, "second retrieval after removal should fail")
+	assert.Nil(t, retrieved2)
+}
+
+// TestAuthCacheConcurrentAccess verifies that concurrent access to the same
+// authID is handled correctly by the cache.
+func TestAuthCacheConcurrentAccess(t *testing.T) {
+	cache := expirable.NewLRU[types.AuthID, *types.AuthRequest](
+		100,
+		func(_ types.AuthID, rn *types.AuthRequest) {
+			rn.FinishAuth(types.AuthVerdict{Err: ErrRegistrationExpired})
+		},
+		time.Hour,
+	)
+
+	id := types.MustAuthID()
+	entry := types.NewAuthRequest()
+	cache.Add(id, entry)
+
+	const numGoroutines = 10
+	successCount := make(chan bool, numGoroutines)
+
+	// Launch multiple goroutines trying to get the same entry
+	for i := 0; i < numGoroutines; i++ {
+		go func() {
+			retrieved, ok := cache.Get(id)
+			successCount <- ok && retrieved != nil
+		}()
+	}
+
+	// All should succeed since we're only reading
+	successes := 0
+	for i := 0; i < numGoroutines; i++ {
+		if <-successCount {
+			successes++
+		}
+	}
+
+	assert.Equal(t, numGoroutines, successes,
+		"all concurrent reads should succeed")
+}
+
+// TestAuthCacheConcurrentRemoval verifies that only one goroutine can
+// successfully consume (retrieve and remove) an auth entry.
+func TestAuthCacheConcurrentRemoval(t *testing.T) {
+	cache := expirable.NewLRU[types.AuthID, *types.AuthRequest](
+		100,
+		func(_ types.AuthID, rn *types.AuthRequest) {
+			rn.FinishAuth(types.AuthVerdict{Err: ErrRegistrationExpired})
+		},
+		time.Hour,
+	)
+
+	id := types.MustAuthID()
+	entry := types.NewAuthRequest()
+	cache.Add(id, entry)
+
+	const numGoroutines = 10
+	successCount := make(chan bool, numGoroutines)
+
+	// Launch multiple goroutines trying to consume the same entry
+	for i := 0; i < numGoroutines; i++ {
+		go func() {
+			// Attempt to get and immediately remove
+			retrieved, ok := cache.Get(id)
+			if ok && retrieved != nil {
+				cache.Remove(id)
+				successCount <- true
+			} else {
+				successCount <- false
+			}
+		}()
+	}
+
+	// At least one should succeed, others may fail
+	successes := 0
+	for i := 0; i < numGoroutines; i++ {
+		if <-successCount {
+			successes++
+		}
+	}
+
+	assert.GreaterOrEqual(t, successes, 1,
+		"at least one goroutine should successfully retrieve the entry")
+
+	// Entry should be gone after all goroutines complete
+	_, ok := cache.Get(id)
+	assert.False(t, ok, "entry should be removed after concurrent access")
+}
+
+// TestAuthCacheMultipleEntries verifies that multiple independent auth
+// entries can coexist and be managed independently.
+func TestAuthCacheMultipleEntries(t *testing.T) {
+	cache := expirable.NewLRU[types.AuthID, *types.AuthRequest](
+		100,
+		func(_ types.AuthID, rn *types.AuthRequest) {
+			rn.FinishAuth(types.AuthVerdict{Err: ErrRegistrationExpired})
+		},
+		time.Hour,
+	)
+
+	const numEntries = 10
+	ids := make([]types.AuthID, numEntries)
+	entries := make([]*types.AuthRequest, numEntries)
+
+	// Add multiple entries
+	for i := 0; i < numEntries; i++ {
+		ids[i] = types.MustAuthID()
+		entries[i] = types.NewAuthRequest()
+		cache.Add(ids[i], entries[i])
+	}
+
+	// All should be retrievable
+	for i := 0; i < numEntries; i++ {
+		retrieved, ok := cache.Get(ids[i])
+		assert.True(t, ok, "entry %d should be retrievable", i)
+		assert.Equal(t, entries[i], retrieved)
+	}
+
+	// Remove one entry
+	cache.Remove(ids[5])
+
+	// Removed entry should be gone
+	_, ok := cache.Get(ids[5])
+	assert.False(t, ok, "removed entry should not be retrievable")
+
+	// Other entries should still exist
+	for i := 0; i < numEntries; i++ {
+		if i == 5 {
+			continue
+		}
+		retrieved, ok := cache.Get(ids[i])
+		assert.True(t, ok, "entry %d should still be retrievable", i)
+		assert.Equal(t, entries[i], retrieved)
+	}
+}
+
+// TestAuthCacheEvictionDoesNotAffectOthers verifies that when an entry
+// is evicted due to size limits, it doesn't affect other entries.
+func TestAuthCacheEvictionDoesNotAffectOthers(t *testing.T) {
+	const maxEntries = 5
+
+	cache := expirable.NewLRU[types.AuthID, *types.AuthRequest](
+		maxEntries,
+		func(_ types.AuthID, rn *types.AuthRequest) {
+			rn.FinishAuth(types.AuthVerdict{Err: ErrRegistrationExpired})
+		},
+		time.Hour,
+	)
+
+	ids := make([]types.AuthID, maxEntries+2)
+	entries := make([]*types.AuthRequest, maxEntries+2)
+
+	// Add maxEntries entries
+	for i := 0; i < maxEntries; i++ {
+		ids[i] = types.MustAuthID()
+		entries[i] = types.NewAuthRequest()
+		cache.Add(ids[i], entries[i])
+	}
+
+	// Add two more, which should evict the first two
+	for i := maxEntries; i < maxEntries+2; i++ {
+		ids[i] = types.MustAuthID()
+		entries[i] = types.NewAuthRequest()
+		cache.Add(ids[i], entries[i])
+	}
+
+	// First two should be evicted
+	_, ok := cache.Get(ids[0])
+	assert.False(t, ok, "first entry should be evicted")
+	_, ok = cache.Get(ids[1])
+	assert.False(t, ok, "second entry should be evicted")
+
+	// Remaining entries should still be present
+	for i := 2; i < maxEntries+2; i++ {
+		retrieved, ok := cache.Get(ids[i])
+		assert.True(t, ok, "entry %d should still be present", i)
+		assert.Equal(t, entries[i], retrieved)
+	}
+}

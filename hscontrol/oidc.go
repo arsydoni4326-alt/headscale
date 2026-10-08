@@ -865,7 +865,14 @@ func (a *AuthProviderOIDC) RegisterConfirmGetHandler(
 		info.OS = regData.Hostinfo.OS
 	}
 
-	if qrPNG, err := qr.GenerateRegistrationQR(authID.String(), a.serverURL, authReq.ExpiresAt()); err == nil {
+	// Generate QR code for Headplane mobile scanning. Graceful fallback:
+	// if generation fails, the template omits the QR section.
+	// Default to 15 minutes from now to match auth cache TTL if no explicit expiry.
+	expiresAt := time.Now().Add(15 * time.Minute)
+	if pending.NodeExpiry != nil {
+		expiresAt = *pending.NodeExpiry
+	}
+	if qrPNG, err := qr.GenerateRegistrationQR(authID.String(), a.serverURL, expiresAt); err == nil {
 		info.QRCodeDataURL = "data:image/png;base64," + base64.StdEncoding.EncodeToString(qrPNG)
 	} else {
 		log.Warn().Err(err).Msg("Failed to generate registration QR code")

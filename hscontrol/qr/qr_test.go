@@ -197,3 +197,55 @@ func BenchmarkGenerateRegistrationQRWithSize_Large(b *testing.B) {
 		}
 	}
 }
+
+func TestGenerateRegistrationQR_ZeroExpiry(t *testing.T) {
+	authID := "hskey-abc123"
+	serverURL := "https://headscale.example.com"
+	expiresAt := time.Time{} // Zero time
+
+	pngData, err := GenerateRegistrationQR(authID, serverURL, expiresAt)
+
+	assert.Error(t, err)
+	assert.Nil(t, pngData)
+	assert.Contains(t, err.Error(), "expires_at cannot be zero")
+}
+
+func TestGenerateRegistrationQR_ExpiryOnBoundary(t *testing.T) {
+	// Test with expiry just barely in the future (1 millisecond)
+	authID := "hskey-abc123"
+	serverURL := "https://headscale.example.com"
+	expiresAt := time.Now().Add(1 * time.Millisecond)
+
+	pngData, err := GenerateRegistrationQR(authID, serverURL, expiresAt)
+
+	// Should succeed if called before expiry
+	require.NoError(t, err)
+	assert.NotEmpty(t, pngData)
+	assert.True(
+		t,
+		bytes.HasPrefix(pngData, pngSignature),
+		"generated data should have valid PNG signature",
+	)
+}
+
+func TestGenerateRegistrationQR_VeryShortExpiry(t *testing.T) {
+	// Test that a QR generated with very short expiry works immediately
+	// but would fail if regenerated after expiry
+	authID := "hskey-abc123"
+	serverURL := "https://headscale.example.com"
+	expiresAt := time.Now().Add(10 * time.Millisecond)
+
+	// First generation should succeed
+	pngData1, err := GenerateRegistrationQR(authID, serverURL, expiresAt)
+	require.NoError(t, err)
+	assert.NotEmpty(t, pngData1)
+
+	// Wait for expiry
+	time.Sleep(15 * time.Millisecond)
+
+	// Second generation with same (now-past) expiry should fail
+	pngData2, err := GenerateRegistrationQR(authID, serverURL, expiresAt)
+	assert.Error(t, err)
+	assert.Nil(t, pngData2)
+	assert.Contains(t, err.Error(), "expires_at must be in the future")
+}
