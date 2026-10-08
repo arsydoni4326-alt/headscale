@@ -1432,6 +1432,278 @@ Cards span the full width of the content container, with appropriate responsive 
 
 ---
 
+## Phase 17 — QR Code Registration Flow (Headscale + Headplane) [Proposed]
+
+**Status:** Proposed  
+**Priority:** Medium  
+**Impact:** Feature addition — backward compatible, additive only
+
+### Objective
+
+Add a QR code-based registration flow to improve the onboarding experience for
+new nodes. This feature will allow users to register a node by either running
+the CLI command (as today) or by scanning a QR code with Headplane's web UI,
+which will automatically approve the device after a successful scan.
+
+### Motivation
+
+- Simplifies device onboarding, especially for less technical users or mobile
+  devices.
+- Reduces manual copy-paste errors and streamlines the registration process.
+- Aligns with modern UX expectations for device onboarding (scan-to-connect
+  pattern).
+- Improves accessibility for users who cannot easily copy-paste CLI commands
+  between devices.
+
+### Current Behavior
+
+When a user registers a new node, Headscale returns a URL to the node
+registration page that displays:
+
+```
+Node registration
+Run the command below in the headscale server to add this node to your network:
+
+headscale auth register --auth-id <hskey> --user USERNAME
+```
+
+### Proposed Behavior
+
+The registration page will display both the CLI command and a QR code option:
+
+```
+Node registration
+Run the command below in the headscale server to add this node to your network:
+
+headscale auth register --auth-id <hskey> --user USERNAME
+
+Or you can go to Headplane:
+Go to Machines → Click Add Device → Scan QR → Choose User → Click Scan QR
+
+[QR CODE IMAGE]
+```
+
+In Headplane, the QR code scanner will be located in:
+**Machines → Add Device → Scan QR → Choose User → Scan QR**
+
+After a successful scan, the device will be automatically approved.
+
+### Scope
+
+#### Backend (Headscale)
+
+- [ ] **Registration page enhancement**:
+  - [ ] Keep the existing CLI command display (no changes to existing behavior)
+  - [ ] Add a new section with instructions for Headplane QR code scanning
+  - [ ] Generate a QR code image that encodes the registration payload
+  - [ ] Ensure QR code contains necessary registration information:
+    - Registration URL or auth-id (`hskey`)
+    - Server URL or endpoint
+    - Any other required metadata for Headplane to complete registration
+- [ ] **QR code generation**:
+  - [ ] Select and integrate a well-supported Go QR code library
+  - [ ] Design the QR code payload format (JSON or URL-encoded)
+  - [ ] Ensure the payload is minimal and secure (no secrets leaked)
+  - [ ] Generate QR code only for valid, pending registrations
+  - [ ] Add appropriate cache headers or expiry for QR code images
+- [ ] **Security considerations**:
+  - [ ] Verify that QR codes cannot be reused after registration
+  - [ ] Ensure QR codes expire with the registration attempt
+  - [ ] Validate that the payload cannot leak sensitive information
+  - [ ] Rate-limit QR code generation if necessary
+
+#### Frontend (Headplane)
+
+- [ ] **Machines page enhancement**:
+  - [ ] Add "Add Device" button or menu option in Machines page
+  - [ ] Create "Scan QR" flow within Add Device workflow
+  - [ ] Integrate QR code scanner using browser camera API
+  - [ ] Add user/namespace selection step before or after scanning
+  - [ ] Handle camera permissions and error states gracefully
+- [ ] **QR code scanner implementation**:
+  - [ ] Select and integrate a well-supported TypeScript/React QR scanner library
+  - [ ] Implement camera access with proper permission handling
+  - [ ] Extract registration payload from scanned QR code
+  - [ ] Validate the payload format and required fields
+  - [ ] Parse and display registration information to user for confirmation
+- [ ] **Device approval flow**:
+  - [ ] After successful scan, trigger device approval automatically via Headscale API
+  - [ ] Show success confirmation with device details
+  - [ ] Handle error cases (invalid QR code, network failure, approval failure)
+  - [ ] Redirect user to the newly approved device or machines list
+- [ ] **UI/UX**:
+  - [ ] Design a clean, intuitive scanner interface
+  - [ ] Add loading states during camera initialization and approval
+  - [ ] Provide clear error messages for common failure scenarios
+  - [ ] Add help text or tooltips explaining the QR code flow
+  - [ ] Ensure mobile-responsive design for the scanner interface
+
+### Acceptance Criteria
+
+- [ ] The registration page in Headscale shows both the CLI command (unchanged)
+      and a QR code with instructions
+- [ ] The QR code can be displayed on one device and scanned from another device
+      running Headplane
+- [ ] Headplane's "Add Device" flow includes a "Scan QR" option
+- [ ] The QR scanner successfully captures and parses the registration payload
+- [ ] After scanning, the user can select the target user/namespace
+- [ ] The device is successfully registered and approved after scan completion
+- [ ] Error handling covers: invalid QR code, expired registration, network
+      failures, permission denials
+- [ ] The flow works across different browsers (Chrome, Firefox, Safari, Edge)
+- [ ] The flow works on mobile devices (iOS Safari, Android Chrome)
+- [ ] Security: QR code payloads do not leak secrets or allow unauthorized
+      registrations
+- [ ] Security: QR codes expire appropriately and cannot be reused
+
+### Implementation Notes
+
+#### QR Code Library Selection
+
+**Backend (Go):**
+- Consider: `github.com/skip2/go-qrcode` (popular, maintained, MIT license)
+- Alternative: `github.com/yeqown/go-qrcode` (v2, modern API)
+- Evaluate based on: maintenance status, license compatibility, API simplicity
+
+**Frontend (TypeScript/React):**
+- Consider: `@yudiel/react-qr-scanner` (React hooks, TypeScript support)
+- Alternative: `react-qr-reader` or `html5-qrcode`
+- Evaluate based on: React 18 compatibility, TypeScript support, browser API usage
+
+#### QR Code Payload Format
+
+**Option A: Encoded URL**
+```
+https://headscale.example.com/register?key=<hskey>&server=<server-url>
+```
+
+**Option B: JSON payload**
+```json
+{
+  "type": "headscale-registration",
+  "version": "1",
+  "authKey": "<hskey>",
+  "serverUrl": "<server-url>",
+  "timestamp": "<unix-timestamp>"
+}
+```
+
+Recommendation: Use JSON payload for extensibility and clearer structure.
+
+#### API Endpoints
+
+- [ ] Headscale may need a new API endpoint for Headplane to complete registration:
+  - `POST /api/v1/node/register` (if not already available)
+  - Accepts: `auth_key`, `user` (or namespace)
+  - Returns: Node details or success confirmation
+- [ ] Verify existing `headscale auth register` logic can be called via API
+- [ ] Ensure proper authentication for the registration API endpoint
+
+#### Camera Permissions
+
+- [ ] Handle browser camera permission prompts gracefully
+- [ ] Provide fallback UI if camera access is denied
+- [ ] Add instructions for users to enable camera permissions
+- [ ] Consider desktop vs mobile UX differences
+
+### Testing Requirements
+
+#### Unit Tests
+
+- [ ] Backend: QR code generation with valid registration data
+- [ ] Backend: QR code payload encoding and security validation
+- [ ] Frontend: QR scanner payload parsing and validation
+- [ ] Frontend: Registration API call with extracted payload
+
+#### Integration Tests
+
+- [ ] End-to-end test: Generate QR code → Scan → Approve device
+- [ ] Test across different browsers and devices
+- [ ] Test error scenarios: expired QR, invalid payload, network failure
+- [ ] Test user/namespace selection flow
+- [ ] Verify QR codes expire appropriately
+
+#### Manual Testing
+
+- [ ] Real device registration using QR code on mobile phone
+- [ ] Cross-device testing (QR on desktop, scan from mobile)
+- [ ] Camera permission handling on different browsers
+- [ ] Accessibility testing (keyboard navigation, screen reader)
+
+### Documentation Updates
+
+- [ ] Update user guide with QR code registration instructions:
+  - [ ] `docs/usage/registration.md` (or create if missing)
+  - [ ] Add screenshots of registration page with QR code
+  - [ ] Add screenshots of Headplane scanner interface
+  - [ ] Document the step-by-step flow
+- [ ] Update Headplane documentation:
+  - [ ] `headplane/docs/usage/device-registration.md` (or similar)
+  - [ ] Document the "Add Device → Scan QR" flow
+  - [ ] Include troubleshooting section for camera permissions
+- [ ] Update API documentation if new endpoints are added
+- [ ] Update `CHANGELOG.md` with the new feature
+- [ ] Add security notes about QR code expiry and payload validation
+
+### Security Considerations
+
+- [ ] **QR code expiry**: QR codes must expire when the registration session
+      expires (typically 5-10 minutes)
+- [ ] **One-time use**: QR codes should be invalidated after successful registration
+- [ ] **No secrets in payload**: QR code should not contain passwords, API keys,
+      or other sensitive credentials
+- [ ] **Payload validation**: Headplane must validate the payload structure and
+      required fields before processing
+- [ ] **HTTPS enforcement**: Registration flow must use HTTPS to prevent
+      man-in-the-middle attacks
+- [ ] **Rate limiting**: Consider rate-limiting QR code generation and registration
+      attempts to prevent abuse
+- [ ] **Audit logging**: Log QR code generation and scan events for security auditing
+
+### Browser Compatibility
+
+- [ ] Chrome/Chromium (desktop and mobile)
+- [ ] Firefox (desktop and mobile)
+- [ ] Safari (desktop and iOS)
+- [ ] Edge (desktop)
+- [ ] Ensure graceful degradation if camera API is unavailable
+
+### Future Enhancements (Out of Scope)
+
+- QR code styling/branding (logo overlay, custom colors)
+- Bulk registration via multiple QR codes
+- Pre-authentication key QR codes (for pre-authorized devices)
+- QR code-based configuration transfer (routes, DNS, etc.)
+
+### Dependencies
+
+- This feature depends on:
+  - Headscale registration API (existing or new endpoint)
+  - Headplane authentication (user must be logged in to scan QR codes)
+  - Browser camera API support (WebRTC `getUserMedia`)
+
+### Estimated Effort
+
+- Backend (Headscale): 6-8 hours
+  - QR code library integration: 2 hours
+  - Registration page enhancement: 2 hours
+  - Payload design and security validation: 2-3 hours
+  - Testing: 1-2 hours
+- Frontend (Headplane): 10-12 hours
+  - QR scanner library integration: 3-4 hours
+  - UI/UX design and implementation: 4-5 hours
+  - API integration and approval flow: 2-3 hours
+  - Testing and browser compatibility: 2 hours
+- Documentation: 2-3 hours
+- Total: **18-23 hours**
+
+### Release Target
+
+- Headscale: `v0.37.0-arsydoni4326-alt` or later
+- Headplane: `v0.9.0-arsydoni4326-alt` or later
+
+---
+
 ## Tracking
 
 - Day-to-day work is tracked via GitHub issues on the fork repositories.
