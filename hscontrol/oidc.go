@@ -867,7 +867,8 @@ func (a *AuthProviderOIDC) RegisterConfirmGetHandler(
 
 	// Generate QR code for Headplane mobile scanning. Graceful fallback:
 	// if generation fails, the template omits the QR section.
-	expiresAt := time.Time{} // Default to zero time if expiry not set
+	// Default to 15 minutes from now to match auth cache TTL if no explicit expiry.
+	expiresAt := time.Now().Add(15 * time.Minute)
 	if pending.NodeExpiry != nil {
 		expiresAt = *pending.NodeExpiry
 	}
