@@ -2,6 +2,7 @@ package qr
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -93,13 +94,14 @@ func TestPayload_ToJSON(t *testing.T) {
 }
 
 func TestParseRegistrationPayload_Valid(t *testing.T) {
-	jsonData := []byte(`{
+	futureTime := time.Now().Add(24 * time.Hour)
+	jsonData := []byte(fmt.Sprintf(`{
 		"type": "headscale-registration",
 		"version": "1",
 		"auth_id": "hskey-abc123",
 		"server_url": "https://headscale.example.com",
-		"expires_at": "2026-10-08T07:00:00Z"
-	}`)
+		"expires_at": "%s"
+	}`, futureTime.Format(time.RFC3339)))
 
 	payload, err := ParseRegistrationPayload(jsonData)
 
@@ -108,11 +110,7 @@ func TestParseRegistrationPayload_Valid(t *testing.T) {
 	assert.Equal(t, "1", payload.Version)
 	assert.Equal(t, "hskey-abc123", payload.AuthID)
 	assert.Equal(t, "https://headscale.example.com", payload.ServerURL)
-	assert.Equal(
-		t,
-		time.Date(2026, 10, 8, 7, 0, 0, 0, time.UTC),
-		payload.ExpiresAt,
-	)
+	assert.WithinDuration(t, futureTime, payload.ExpiresAt, time.Second)
 }
 
 func TestParseRegistrationPayload_InvalidJSON(t *testing.T) {
@@ -203,6 +201,23 @@ func TestParseRegistrationPayload_ZeroExpiry(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, payload)
 	assert.Contains(t, err.Error(), "expires_at cannot be zero")
+}
+
+func TestParseRegistrationPayload_ExpiredAtParseTime(t *testing.T) {
+	// Simulate a QR code that was generated in the past and is now expired
+	jsonData := []byte(`{
+		"type": "headscale-registration",
+		"version": "1",
+		"auth_id": "hskey-abc123",
+		"server_url": "https://headscale.example.com",
+		"expires_at": "2020-01-01T00:00:00Z"
+	}`)
+
+	payload, err := ParseRegistrationPayload(jsonData)
+
+	assert.Error(t, err)
+	assert.Nil(t, payload)
+	assert.Contains(t, err.Error(), "payload has expired")
 }
 
 func TestPayload_RoundTrip(t *testing.T) {

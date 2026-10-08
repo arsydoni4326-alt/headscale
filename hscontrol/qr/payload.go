@@ -73,6 +73,9 @@ func ParseRegistrationPayload(data []byte) (*RegistrationPayload, error) {
 	if payload.ExpiresAt.IsZero() {
 		return nil, fmt.Errorf("expires_at cannot be zero")
 	}
+	if payload.ExpiresAt.Before(time.Now()) {
+		return nil, fmt.Errorf("payload has expired")
+	}
 
 	return &payload, nil
 }
