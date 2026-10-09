@@ -1781,10 +1781,25 @@ func (s *State) GetAuthCacheEntry(id types.AuthID) (*types.AuthRequest, bool) {
 }
 
 // SetAuthCacheEntry stores a pending auth request in the cache.
+// If the entry already exists, this does NOT extend its TTL or update its expiry.
+// If the entry has no expiry set, the default cache expiration is applied.
 func (s *State) SetAuthCacheEntry(id types.AuthID, entry *types.AuthRequest) {
+	// Only set expiry if not already set
 	if entry.ExpiresAt().IsZero() {
 		entry.SetExpiry(time.Now().Add(s.authCacheExpiration))
 	}
+	
+	// Check if entry already exists - if so, don't overwrite with new expiry
+	if existing, ok := s.authCache.Get(id); ok {
+		// Entry already exists - preserve original expiry, don't allow bypass
+		log.Debug().
+			Str("auth_id", id.String()).
+			Time("existing_expiry", existing.ExpiresAt()).
+			Time("attempted_expiry", entry.ExpiresAt()).
+			Msg("auth cache entry already exists, preserving original expiry")
+		return
+	}
+	
 	s.authCache.Add(id, entry)
 }
 

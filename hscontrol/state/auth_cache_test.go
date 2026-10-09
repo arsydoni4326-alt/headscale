@@ -364,3 +364,164 @@ func TestAuthCacheEvictionDoesNotAffectOthers(t *testing.T) {
 		assert.Equal(t, entries[i], retrieved)
 	}
 }
+
+// TestSetAuthCacheEntryDoesNotExtendExpiry verifies that re-inserting an
+// existing entry does not extend its expiry or allow bypassing cache expiration.
+func TestSetAuthCacheEntryDoesNotExtendExpiry(t *testing.T) {
+	s := &State{
+		authCache:           expirable.NewLRU[types.AuthID, *types.AuthRequest](10, nil, time.Hour),
+		authCacheExpiration: time.Hour,
+	}
+
+	authID := types.MustAuthID()
+	originalExpiry := time.Now().Add(10 * time.Minute)
+
+	// Insert with short expiry
+	entry1 := types.NewRegisterAuthRequest(&types.RegistrationData{})
+	entry1.SetExpiry(originalExpiry)
+	s.SetAuthCacheEntry(authID, entry1)
+
+	// Verify first insertion
+	retrieved, ok := s.GetAuthCacheEntry(authID)
+	require.True(t, ok)
+	assert.Equal(t, originalExpiry.Unix(), retrieved.ExpiresAt().Unix())
+
+	// Try to re-insert with longer expiry - should be rejected
+	laterExpiry := time.Now().Add(2 * time.Hour)
+	entry2 := types.NewRegisterAuthRequest(&types.RegistrationData{})
+	entry2.SetExpiry(laterExpiry)
+	s.SetAuthCacheEntry(authID, entry2)
+
+	// Verify expiry was NOT extended
+	retrieved, ok = s.GetAuthCacheEntry(authID)
+	require.True(t, ok)
+	assert.Equal(t, originalExpiry.Unix(), retrieved.ExpiresAt().Unix(), "expiry should not be extended by re-insertion")
+}
+
+// TestAuthCacheInvalidAuthID verifies that attempting to retrieve
+// a non-existent auth ID returns false.
+func TestAuthCacheInvalidAuthID(t *testing.T) {
+	s := &State{
+		authCache:           expirable.NewLRU[types.AuthID, *types.AuthRequest](10, nil, time.Hour),
+		authCacheExpiration: time.Hour,
+	}
+
+	// Try to get non-existent entry
+	invalidID := types.MustAuthID()
+	_, ok := s.GetAuthCacheEntry(invalidID)
+	assert.False(t, ok, "non-existent auth ID should not be found")
+}
+
+// TestAuthCacheReusedAuthID verifies that the same auth ID cannot be
+// used for multiple distinct registrations by preventing re-insertion.
+func TestAuthCacheReusedAuthID(t *testing.T) {
+	s := &State{
+		authCache:           expirable.NewLRU[types.AuthID, *types.AuthRequest](10, nil, time.Hour),
+		authCacheExpiration: time.Hour,
+	}
+
+	authID := types.MustAuthID()
+
+	// First registration
+	data1 := &types.RegistrationData{
+		Hostname: "node1",
+	}
+	entry1 := types.NewRegisterAuthRequest(data1)
+	s.SetAuthCacheEntry(authID, entry1)
+
+	retrieved1, ok := s.GetAuthCacheEntry(authID)
+	require.True(t, ok)
+	assert.Equal(t, "node1", retrieved1.RegistrationData().Hostname)
+
+	// Attempt to reuse same auth ID with different data
+	data2 := &types.RegistrationData{
+		Hostname: "node2",
+	}
+	entry2 := types.NewRegisterAuthRequest(data2)
+	s.SetAuthCacheEntry(authID, entry2)
+
+	// Should still have original entry, not the new one
+	retrieved2, ok := s.GetAuthCacheEntry(authID)
+	require.True(t, ok)
+	assert.Equal(t, "node1", retrieved2.RegistrationData().Hostname, "original entry should be preserved")
+}
+
+// TestAuthCacheExpiredEntryNotRetrievable verifies that expired entries
+// are properly cleaned up by the LRU cache's TTL mechanism.
+func TestAuthCacheExpiredEntryNotRetrievable(t *testing.T) {
+	const shortTTL = 50 * time.Millisecond
+
+	cache := expirable.NewLRU[types.AuthID, *types.AuthRequest](
+		10,
+		func(_ types.AuthID, rn *types.AuthRequest) {
+			rn.FinishAuth(types.AuthVerdict{Err: ErrRegistrationExpired})
+		},
+		shortTTL,
+	)
+
+	authID := types.MustAuthID()
+	entry := types.NewAuthRequest()
+	cache.Add(authID, entry)
+
+	// Should be retrievable immediately
+	_, ok := cache.Get(authID)
+	require.True(t, ok, "entry should be immediately retrievable")
+
+	// Wait for TTL expiry
+	time.Sleep(shortTTL + 50*time.Millisecond)
+
+	// Should no longer be retrievable
+	_, ok = cache.Get(authID)
+	assert.False(t, ok, "expired entry should not be retrievable")
+}
+
+// TestAuthCacheZeroExpiryGetsDefault verifies that entries without
+// an expiry set get the default cache expiration.
+func TestAuthCacheZeroExpiryGetsDefault(t *testing.T) {
+	defaultExpiration := 15 * time.Minute
+	s := &State{
+		authCache:           expirable.NewLRU[types.AuthID, *types.AuthRequest](10, nil, time.Hour),
+		authCacheExpiration: defaultExpiration,
+	}
+
+	authID := types.MustAuthID()
+	entry := types.NewRegisterAuthRequest(&types.RegistrationData{})
+	// Don't set expiry - should get default
+
+	beforeAdd := time.Now()
+	s.SetAuthCacheEntry(authID, entry)
+	afterAdd := time.Now()
+
+	retrieved, ok := s.GetAuthCacheEntry(authID)
+	require.True(t, ok)
+
+	expiry := retrieved.ExpiresAt()
+	expectedMin := beforeAdd.Add(defaultExpiration)
+	expectedMax := afterAdd.Add(defaultExpiration)
+
+	assert.True(t,
+		expiry.After(expectedMin.Add(-time.Second)) && expiry.Before(expectedMax.Add(time.Second)),
+		"entry without expiry should get default expiration (~15min)",
+	)
+}
+
+// TestAuthCacheCustomExpiryPreserved verifies that entries with
+// a custom expiry preserve that expiry.
+func TestAuthCacheCustomExpiryPreserved(t *testing.T) {
+	s := &State{
+		authCache:           expirable.NewLRU[types.AuthID, *types.AuthRequest](10, nil, time.Hour),
+		authCacheExpiration: time.Hour,
+	}
+
+	authID := types.MustAuthID()
+	customExpiry := time.Now().Add(5 * time.Minute)
+
+	entry := types.NewRegisterAuthRequest(&types.RegistrationData{})
+	entry.SetExpiry(customExpiry)
+	s.SetAuthCacheEntry(authID, entry)
+
+	retrieved, ok := s.GetAuthCacheEntry(authID)
+	require.True(t, ok)
+	assert.Equal(t, customExpiry.Unix(), retrieved.ExpiresAt().Unix(), "custom expiry should be preserved")
+}
+
