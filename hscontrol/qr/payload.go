@@ -2,8 +2,19 @@ package qr
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
+)
+
+var (
+	errEmptyAuthID         = errors.New("auth_id cannot be empty")
+	errEmptyServerURL      = errors.New("server_url cannot be empty")
+	errZeroExpiry          = errors.New("expires_at cannot be zero")
+	errExpiryNotInFuture   = errors.New("expires_at must be in the future")
+	errInvalidPayloadType  = errors.New("invalid payload type")
+	errUnsupportedVersion  = errors.New("unsupported payload version")
+	errRegistrationExpired = errors.New("payload has expired")
 )
 
 // RegistrationPayload represents the JSON payload encoded in a QR code
@@ -23,16 +34,19 @@ func NewRegistrationPayload(
 	expiresAt time.Time,
 ) (*RegistrationPayload, error) {
 	if authID == "" {
-		return nil, fmt.Errorf("auth_id cannot be empty")
+		return nil, errEmptyAuthID
 	}
+
 	if serverURL == "" {
-		return nil, fmt.Errorf("server_url cannot be empty")
+		return nil, errEmptyServerURL
 	}
+
 	if expiresAt.IsZero() {
-		return nil, fmt.Errorf("expires_at cannot be zero")
+		return nil, errZeroExpiry
 	}
+
 	if expiresAt.Before(time.Now()) {
-		return nil, fmt.Errorf("expires_at must be in the future")
+		return nil, errExpiryNotInFuture
 	}
 
 	return &RegistrationPayload{
@@ -53,28 +67,35 @@ func (p *RegistrationPayload) ToJSON() ([]byte, error) {
 // from JSON bytes.
 func ParseRegistrationPayload(data []byte) (*RegistrationPayload, error) {
 	var payload RegistrationPayload
-	if err := json.Unmarshal(data, &payload); err != nil {
+
+	err := json.Unmarshal(data, &payload)
+	if err != nil {
 		return nil, fmt.Errorf("failed to parse payload: %w", err)
 	}
 
 	// Validate the parsed payload
 	if payload.Type != "headscale-registration" {
-		return nil, fmt.Errorf("invalid payload type: %s", payload.Type)
+		return nil, fmt.Errorf("%w: %s", errInvalidPayloadType, payload.Type)
 	}
+
 	if payload.Version != "1" {
-		return nil, fmt.Errorf("unsupported payload version: %s", payload.Version)
+		return nil, fmt.Errorf("%w: %s", errUnsupportedVersion, payload.Version)
 	}
+
 	if payload.AuthID == "" {
-		return nil, fmt.Errorf("auth_id cannot be empty")
+		return nil, errEmptyAuthID
 	}
+
 	if payload.ServerURL == "" {
-		return nil, fmt.Errorf("server_url cannot be empty")
+		return nil, errEmptyServerURL
 	}
+
 	if payload.ExpiresAt.IsZero() {
-		return nil, fmt.Errorf("expires_at cannot be zero")
+		return nil, errZeroExpiry
 	}
+
 	if payload.ExpiresAt.Before(time.Now()) {
-		return nil, fmt.Errorf("payload has expired")
+		return nil, errRegistrationExpired
 	}
 
 	return &payload, nil
