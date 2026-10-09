@@ -52,6 +52,10 @@ harden what exists today before expanding into new territory.
   supports a single local administrator with password stored as a bcrypt hash in
   configuration. Multi-user local authentication has been retired. Latest fork
   releases: Headscale `v0.34.0-arsydoni4326-alt`, Headplane `v0.8.3-arsydoni4326-alt`.
+- Phase 17 QR registration is complete: pending interactive registration pages
+  retain CLI approval and provide QR approval through Headplane's
+  **Machines → Scan QR** flow. Headscale remains authoritative for auth-ID
+  expiry and single use.
 - Phase 11 below is **proposed** and must not be implemented without
   explicit approval.
 - Phase 12 is **partially implemented**: the backend approval API is done; the
@@ -1525,9 +1529,9 @@ OIDC registration. In Headplane, the QR code scanner is located in:
 After scanning, the administrator submits registration for the selected user;
 Headscale then approves the device if the pending registration is still valid.
 
-### Requested implementation brief: QR approval from the registration page [Planned]
+### Requested implementation brief: QR approval from the registration page [Implemented]
 
-This brief is the authoritative plan for agents implementing the requested
+This retained implementation record is the authoritative description of the
 non-OIDC interactive-registration experience. The required Headplane workflow
 is: **Machines → Scan QR → Select User → Start Scanning**.
 
