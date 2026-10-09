@@ -1519,6 +1519,26 @@ OIDC registration. In Headplane, the QR code scanner is located in:
 After scanning, the administrator submits registration for the selected user;
 Headscale then approves the device if the pending registration is still valid.
 
+### Requested UX refinement: Add Device entry point [Planned]
+
+Add a guided QR-registration entry point in Headplane without removing the
+existing **Machines → Scan QR** route. The requested operator flow is:
+
+1. The Headscale registration page continues to show the CLI command and the QR
+   code for the pending registration.
+2. The page instructs the operator to open Headplane and navigate to
+   **Machines → Add Device → Scan QR**.
+3. The Add Device workflow presents **Scan QR**, then lets the operator choose
+   the Headscale user that will own the device and start the QR scanner.
+4. After a successful, valid scan, Headplane submits the existing pending auth
+   ID for the selected user and immediately approves the device through the
+   existing Headscale registration path.
+
+The refinement must preserve the existing CLI fallback and Headscale's
+server-side authorization checks. A scan must fail, rather than approve a
+device, when the payload is invalid, the pending auth ID has expired or been
+consumed, or Headscale rejects the selected user assignment.
+
 ### Scope
 
 #### Backend (Headscale)
