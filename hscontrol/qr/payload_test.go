@@ -32,7 +32,7 @@ func TestNewRegistrationPayload_EmptyAuthID(t *testing.T) {
 
 	payload, err := NewRegistrationPayload("", serverURL, expiresAt)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, payload)
 	assert.Contains(t, err.Error(), "auth_id cannot be empty")
 }
@@ -43,7 +43,7 @@ func TestNewRegistrationPayload_EmptyServerURL(t *testing.T) {
 
 	payload, err := NewRegistrationPayload(authID, "", expiresAt)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, payload)
 	assert.Contains(t, err.Error(), "server_url cannot be empty")
 }
@@ -54,7 +54,7 @@ func TestNewRegistrationPayload_ZeroExpiry(t *testing.T) {
 
 	payload, err := NewRegistrationPayload(authID, serverURL, time.Time{})
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, payload)
 	assert.Contains(t, err.Error(), "expires_at cannot be zero")
 }
@@ -66,7 +66,7 @@ func TestNewRegistrationPayload_PastExpiry(t *testing.T) {
 
 	payload, err := NewRegistrationPayload(authID, serverURL, expiresAt)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, payload)
 	assert.Contains(t, err.Error(), "expires_at must be in the future")
 }
@@ -83,7 +83,8 @@ func TestPayload_ToJSON(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify JSON structure
-	var decoded map[string]interface{}
+	var decoded map[string]any
+
 	err = json.Unmarshal(jsonData, &decoded)
 	require.NoError(t, err)
 
@@ -119,7 +120,7 @@ func TestParseRegistrationPayload_InvalidJSON(t *testing.T) {
 
 	payload, err := ParseRegistrationPayload(jsonData)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, payload)
 	assert.Contains(t, err.Error(), "failed to parse payload")
 }
@@ -135,7 +136,7 @@ func TestParseRegistrationPayload_InvalidType(t *testing.T) {
 
 	payload, err := ParseRegistrationPayload(jsonData)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, payload)
 	assert.Contains(t, err.Error(), "invalid payload type")
 }
@@ -151,7 +152,7 @@ func TestParseRegistrationPayload_InvalidVersion(t *testing.T) {
 
 	payload, err := ParseRegistrationPayload(jsonData)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, payload)
 	assert.Contains(t, err.Error(), "unsupported payload version")
 }
@@ -167,7 +168,7 @@ func TestParseRegistrationPayload_EmptyAuthID(t *testing.T) {
 
 	payload, err := ParseRegistrationPayload(jsonData)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, payload)
 	assert.Contains(t, err.Error(), "auth_id cannot be empty")
 }
@@ -183,7 +184,7 @@ func TestParseRegistrationPayload_EmptyServerURL(t *testing.T) {
 
 	payload, err := ParseRegistrationPayload(jsonData)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, payload)
 	assert.Contains(t, err.Error(), "server_url cannot be empty")
 }
@@ -199,7 +200,7 @@ func TestParseRegistrationPayload_ZeroExpiry(t *testing.T) {
 
 	payload, err := ParseRegistrationPayload(jsonData)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, payload)
 	assert.Contains(t, err.Error(), "expires_at cannot be zero")
 }
@@ -216,7 +217,7 @@ func TestParseRegistrationPayload_ExpiredAtParseTime(t *testing.T) {
 
 	payload, err := ParseRegistrationPayload(jsonData)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, payload)
 	assert.Contains(t, err.Error(), "payload has expired")
 }
@@ -293,7 +294,7 @@ func TestParseRegistrationPayload_MalformedJSON(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			payload, err := ParseRegistrationPayload(tt.jsonData)
 
-			assert.Error(t, err)
+			require.Error(t, err)
 			assert.Nil(t, payload)
 			assert.Contains(t, err.Error(), tt.errMsg)
 		})
@@ -308,7 +309,8 @@ func TestNewRegistrationPayload_SpecialCharacters(t *testing.T) {
 		shouldErr bool
 	}{
 		{
-			name:      "unicode in auth ID",
+			name: "unicode in auth ID",
+			//nolint:gosmopolitan // Test QR payload round-tripping Unicode data.
 			authID:    "hskey-测试-😀",
 			serverURL: "https://headscale.example.com",
 			shouldErr: false,
@@ -345,7 +347,7 @@ func TestNewRegistrationPayload_SpecialCharacters(t *testing.T) {
 			payload, err := NewRegistrationPayload(tt.authID, tt.serverURL, expiresAt)
 
 			if tt.shouldErr {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, payload)
 			} else {
 				require.NoError(t, err)
