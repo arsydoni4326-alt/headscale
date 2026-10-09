@@ -1452,19 +1452,25 @@ without requiring OpenID Connect (OIDC).
 The QR flow must work when Headscale uses its standard CLI-approved interactive
 registration mode and no OIDC issuer is configured:
 
-1. A node begins interactive registration and is redirected to the public
-   Headscale registration page, for example:
+1. On the device being added, the user opens a terminal and runs:
+
+   ```shell
+   tailscale login --login-server=https://<headscale-server>
+   ```
+
+   Tailscale returns or opens the public Headscale registration URL, for
+   example:
 
    ```text
-   https://<headscale-ui>/register/hskey-authreq-1dc74915f5a96f80xxxxxxxx
+   https://<headscale-server>/register/hskey-authreq-1dc74915f5a96f803xxxxxxxx
    ```
 
 2. The `/register/{auth_id}` page keeps the existing
    `headscale auth register --auth-id <auth_id> --user USERNAME` command and
    displays a QR code for that same pending registration.
-3. An authenticated Headplane administrator opens **Machines → Scan QR**,
-   selects the target Headscale user, starts the camera scanner, and scans the
-   code.
+3. The user gives the displayed QR code to a Headplane administrator. The
+   administrator opens Headplane and follows **Machines → Scan QR → Select
+   User → Start Scanning**, then scans the code.
 4. Headplane completes registration through Headscale's existing registration
    API. Headscale remains authoritative for the pending auth ID, expiry, and
    single-use consumption.
@@ -1507,37 +1513,141 @@ Run the command below in the headscale server to add this node to your network:
 headscale auth register --auth-id <hskey> --user USERNAME
 
 Or you can go to Headplane:
-Go to Machines → Scan QR → Choose User → Start Scanning
+Go to Machines → Scan QR → Select User → Start Scanning
 
 [QR CODE IMAGE]
 ```
 
 This behavior applies to both standard non-OIDC interactive registration and
 OIDC registration. In Headplane, the QR code scanner is located in:
-**Machines → Scan QR → Choose User → Start Scanning**
+**Machines → Scan QR → Select User → Start Scanning**
 
 After scanning, the administrator submits registration for the selected user;
 Headscale then approves the device if the pending registration is still valid.
 
-### Requested UX refinement: Add Device entry point [Planned]
+### Requested implementation brief: QR approval from the registration page [Planned]
 
-Add a guided QR-registration entry point in Headplane without removing the
-existing **Machines → Scan QR** route. The requested operator flow is:
+This brief is the authoritative plan for agents implementing the requested
+non-OIDC interactive-registration experience. The required Headplane workflow
+is: **Machines → Scan QR → Select User → Start Scanning**.
 
-1. The Headscale registration page continues to show the CLI command and the QR
-   code for the pending registration.
-2. The page instructs the operator to open Headplane and navigate to
-   **Machines → Add Device → Scan QR**.
-3. The Add Device workflow presents **Scan QR**, then lets the operator choose
-   the Headscale user that will own the device and start the QR scanner.
-4. After a successful, valid scan, Headplane submits the existing pending auth
-   ID for the selected user and immediately approves the device through the
-   existing Headscale registration path.
+#### User and administrator workflow
 
-The refinement must preserve the existing CLI fallback and Headscale's
-server-side authorization checks. A scan must fail, rather than approve a
-device, when the payload is invalid, the pending auth ID has expired or been
-consumed, or Headscale rejects the selected user assignment.
+1. **User starts device login.** On the device that is joining the tailnet, the
+   user runs:
+
+   ```shell
+   tailscale login --login-server=https://<headscale-server>
+   ```
+
+2. **Headscale exposes a pending registration.** The Tailscale client returns
+   or opens a URL such as:
+
+   ```text
+   https://<headscale-server>/register/hskey-authreq-1dc74915f5a96f803xxxxxxxx
+   ```
+
+3. **Registration page offers two approval methods.** The public
+   `/register/{auth_id}` page keeps the existing command unchanged:
+
+   ```shell
+   headscale auth register --auth-id <hskey> --user USERNAME
+   ```
+
+   The same page also renders a QR image containing only the pending
+   registration information needed to complete this request. It tells the user
+   to provide the QR code to a Headplane administrator.
+
+4. **Administrator scans and chooses the owner.** The authenticated
+   administrator opens `https://<headplane-server>`, navigates to
+   **Machines → Scan QR**, selects the Headscale user that will own the device,
+   presses **Start Scanning**, grants camera access when prompted, and scans the
+   QR code.
+
+5. **Headplane approves the device.** After a valid scan, Headplane validates
+   the payload and submits its auth ID with the selected user through the
+   existing Headscale registration API. A successful response consumes the
+   pending registration and approves the VPN connection; the device can then
+   complete its login.
+
+#### Shared registration contract and security invariants
+
+- The QR code is an alternate transport for an existing pending auth ID, not a
+  credential and not an authorization bypass.
+- Its payload must identify the registration format and version, the auth ID,
+  the public Headscale server URL, and the fixed pending-registration expiry.
+- The payload must never include an API key, password, session cookie, node
+  private key, or user credential.
+- Selecting the Headscale user is mandatory and occurs in Headplane before the
+  administrator starts the scan/approval flow.
+- Headscale remains the sole authority for the registration: it must reject an
+  unknown, expired, already-consumed, or otherwise invalid auth ID, as well as
+  an invalid user assignment.
+- Rendering or revisiting the registration page must not create a new pending
+  registration or extend the existing auth ID's expiry.
+- Headplane must require authenticated machine-write access before exposing the
+  scanner or sending the approval request. Camera access requires HTTPS in
+  normal browser deployments.
+
+#### Agent work packages
+
+1. **Headscale registration-page agent**
+   - Identify the handler and template serving `/register/{auth_id}` for the
+     standard CLI-approved registration flow.
+   - Preserve the existing CLI command verbatim and add clear QR instructions
+     for the administrator hand-off.
+   - Generate a scannable QR image only when the referenced registration is
+     pending and use the registration cache's existing absolute expiry.
+   - Ensure template data is safely escaped and that QR-generation errors do
+     not expose the auth ID outside the normal registration page.
+
+2. **Headplane QR approval agent**
+   - Provide the scanner at **Machines → Scan QR**, without an Add Device
+     prerequisite.
+   - Require the administrator to select a Headscale user, then expose the
+     **Start Scanning** action and browser camera workflow.
+   - Parse and validate the QR type, version, server URL, auth ID, and expiry
+     before any registration request is made.
+   - Submit the valid auth ID and selected user through the established
+     server-side Headscale API client, then show explicit success or failure
+     feedback and refresh machine state.
+
+3. **Test and documentation agent**
+   - Add focused Headscale tests proving that a pending standard registration
+     renders the unchanged CLI command and a QR image with the cache-bound
+     expiry.
+   - Add Headplane unit/component tests for required user selection, valid and
+     invalid payloads, expired payload rejection, camera-permission failure,
+     and successful registration submission.
+   - Add an end-to-end scenario covering: device login command → registration
+     URL → QR display → administrator scan → selected-user approval → device
+     registration completed.
+   - Keep user documentation synchronized with the exact two approval options:
+     CLI or **Machines → Scan QR → Select User → Start Scanning**.
+
+#### Required failure behavior
+
+- A malformed, unsupported, expired, or previously consumed QR payload must
+  show a clear error and must not submit an approval request.
+- A missing selected user, denied/unavailable camera, network failure, or
+  Headscale rejection must leave the pending registration unapproved and give
+  the administrator an actionable message.
+- The original CLI command remains available for every failure case and for
+  deployments where Headplane or camera scanning is unavailable.
+
+#### Acceptance criteria
+
+- [ ] Running `tailscale login --login-server=https://<headscale-server>`
+      produces a registration page that shows both the existing CLI command and
+      a scannable QR image for the same pending auth ID.
+- [ ] An authenticated Headplane administrator can complete
+      **Machines → Scan QR → Select User → Start Scanning** and approve the
+      device after a valid scan.
+- [ ] The selected Headscale user becomes the device owner after approval.
+- [ ] Expiry, single-use consumption, user-assignment validation, and
+      server-side authorization are enforced by Headscale and covered by tests.
+- [ ] No QR payload or UI/log output exposes credentials or changes the
+      existing CLI approval behavior.
 
 ### Scope
 
