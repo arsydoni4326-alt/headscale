@@ -24,7 +24,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/hashicorp/golang-lru/v2/expirable"
 	hsdb "github.com/arsydoni4326-alt/headscale/hscontrol/db"
 	"github.com/arsydoni4326-alt/headscale/hscontrol/policy"
 	"github.com/arsydoni4326-alt/headscale/hscontrol/policy/matcher"
@@ -33,6 +32,7 @@ import (
 	"github.com/arsydoni4326-alt/headscale/hscontrol/util"
 	"github.com/arsydoni4326-alt/headscale/hscontrol/util/zlog"
 	"github.com/arsydoni4326-alt/headscale/hscontrol/util/zlog/zf"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/puzpuzpuz/xsync/v4"
@@ -164,6 +164,9 @@ type State struct {
 	// via the eviction callback so any waiting goroutines wake.
 	authCache *expirable.LRU[types.AuthID, *types.AuthRequest]
 
+	// authCacheExpiration is the configured lifetime for pending requests.
+	authCacheExpiration time.Duration
+
 	// pings tracks pending ping requests and their response channels.
 	pings *pingTracker
 
@@ -279,12 +282,13 @@ func NewState(cfg *types.Config) (*State, error) {
 	s := &State{
 		cfg: cfg,
 
-		db:        db,
-		ipAlloc:   ipAlloc,
-		polMan:    polMan,
-		authCache: authCache,
-		nodeStore: nodeStore,
-		pings:     newPingTracker(),
+		db:                  db,
+		ipAlloc:             ipAlloc,
+		polMan:              polMan,
+		authCache:           authCache,
+		authCacheExpiration: cacheExpiration,
+		nodeStore:           nodeStore,
+		pings:               newPingTracker(),
 
 		sshCheckAuth:  make(map[sshCheckPair]time.Time),
 		registerLocks: xsync.NewMap[key.MachinePublic, *sync.Mutex](),
@@ -1777,7 +1781,25 @@ func (s *State) GetAuthCacheEntry(id types.AuthID) (*types.AuthRequest, bool) {
 }
 
 // SetAuthCacheEntry stores a pending auth request in the cache.
+// If the entry already exists, this does NOT extend its TTL or update its expiry.
+// If the entry has no expiry set, the default cache expiration is applied.
 func (s *State) SetAuthCacheEntry(id types.AuthID, entry *types.AuthRequest) {
+	// Only set expiry if not already set
+	if entry.ExpiresAt().IsZero() {
+		entry.SetExpiry(time.Now().Add(s.authCacheExpiration))
+	}
+	
+	// Check if entry already exists - if so, don't overwrite with new expiry
+	if existing, ok := s.authCache.Get(id); ok {
+		// Entry already exists - preserve original expiry, don't allow bypass
+		log.Debug().
+			Str("auth_id", id.String()).
+			Time("existing_expiry", existing.ExpiresAt()).
+			Time("attempted_expiry", entry.ExpiresAt()).
+			Msg("auth cache entry already exists, preserving original expiry")
+		return
+	}
+	
 	s.authCache.Add(id, entry)
 }
 

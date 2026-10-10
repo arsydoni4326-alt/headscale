@@ -170,7 +170,7 @@ func qrSection(dataURL string) *elem.Element {
 				}.ToInline(),
 			},
 			elem.Text("Navigate to: "),
-			elem.Strong(nil, elem.Text("Machines → Add Device → Scan QR")),
+			elem.Strong(nil, elem.Text("Machines → Scan QR")),
 		),
 		elem.Img(attrs.Props{
 			attrs.Src: dataURL,

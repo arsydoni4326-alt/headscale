@@ -31,6 +31,8 @@ node can be approved with:
 
 - **Web UI** - Headplane provides a web-based interface for viewing and approving pending machines (see [UI Guide](../usage/ui-guide.md#machine-approval))
 - **Headscale CLI** - Described in this documentation using `headscale auth register`
+- **Headplane QR scanner** - Scan the QR code on the pending registration page,
+  select the node owner, and approve it from **Machines → Scan QR**
 - **[Headscale API](api.md#machine-approval)** - REST API endpoints for single and bulk approval
 - **Identity Provider** - Delegated via [OpenID Connect](oidc.md)
 

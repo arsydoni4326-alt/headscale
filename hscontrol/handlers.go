@@ -2,6 +2,7 @@ package hscontrol
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/arsydoni4326-alt/headscale/hscontrol/assets"
+	"github.com/arsydoni4326-alt/headscale/hscontrol/qr"
 	"github.com/arsydoni4326-alt/headscale/hscontrol/templates"
 	"github.com/arsydoni4326-alt/headscale/hscontrol/types"
 	"github.com/rs/zerolog/log"
@@ -335,11 +337,13 @@ func (h *Headscale) VersionHandler(
 }
 
 type AuthProviderWeb struct {
+	h         *Headscale
 	serverURL string
 }
 
-func NewAuthProviderWeb(serverURL string) *AuthProviderWeb {
+func NewAuthProviderWeb(h *Headscale, serverURL string) *AuthProviderWeb {
 	return &AuthProviderWeb{
+		h:         h,
 		serverURL: serverURL,
 	}
 }
@@ -380,6 +384,7 @@ func (a *AuthProviderWeb) AuthHandler(
 		"Authentication check",
 		"Run the command below in the headscale server to approve this authentication request:",
 		"headscale auth approve --auth-id "+authID.String(),
+		"",
 	).Render()))
 	if err != nil {
 		log.Error().Err(err).Msg("failed to write auth response")
@@ -418,6 +423,21 @@ func (a *AuthProviderWeb) RegisterHandler(
 		return
 	}
 
+	qrCodeDataURL := ""
+	if authReq, ok := a.h.state.GetAuthCacheEntry(authId); ok && authReq.IsRegistration() {
+		qrPNG, qrErr := qr.GenerateRegistrationQR(
+			authId.String(),
+			a.serverURL,
+			authReq.ExpiresAt(),
+		)
+		if qrErr != nil {
+			log.Warn().Err(qrErr).Msg("failed to generate registration QR code")
+		} else {
+			qrCodeDataURL = "data:image/png;base64," + base64.StdEncoding.EncodeToString(qrPNG)
+		}
+	}
+
+	writer.Header().Set("Cache-Control", "no-store")
 	writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 	writer.WriteHeader(http.StatusOK)
 
@@ -425,6 +445,7 @@ func (a *AuthProviderWeb) RegisterHandler(
 		"Node registration",
 		"Run the command below in the headscale server to add this node to your network:",
 		fmt.Sprintf("headscale auth register --auth-id %s --user USERNAME", authId.String()),
+		qrCodeDataURL,
 	).Render()))
 	if err != nil {
 		log.Error().Err(err).Msg("failed to write register response")

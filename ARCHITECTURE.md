@@ -142,6 +142,13 @@ The frontend features:
 
 1. Noise handshake (`noise.go`) → auth (`auth.go`) → state/DB persistence
    (`state/`, `db/`) → initial map (`mapper/`).
+2. For pending interactive registrations, `/register/{auth_id}` renders the CLI
+   command and a QR code containing the auth ID, public server URL, and the
+   fixed registration-cache deadline. The same QR is available from the OIDC
+   confirmation page.
+3. Headplane validates the QR payload before registering it to the selected
+   user. Headscale remains authoritative: the pending auth ID must still exist
+   and is consumed by the successful registration.
 
 ## Key Design Decisions
 
